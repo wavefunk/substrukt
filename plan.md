@@ -28,9 +28,7 @@ All core functionality is working and verified with 17 integration tests:
 - [x] File watcher — `notify` watches content/schema dirs with debounced cache invalidation
 - [x] Template autoreload — `minijinja-autoreload` for hot-reload during development
 
-## Remaining Work
-
-All features complete.
+## Completed
 
 ### P4: Developer experience (nice-to-have)
 
@@ -47,6 +45,60 @@ All features complete.
 - [x] **500 error page** — CatchPanic layer returns styled error
 - [x] **Structured logging** — tower-http TraceLayer for request/response tracing
 - [x] **Rate limiting** — per-IP sliding window for login (10/min) and API (100/min)
+
+## Remaining Work
+
+### P6: Observability
+
+- [x] **Prometheus metrics** — `/metrics` endpoint (unauthenticated, for internal scraping)
+  - Request count by method/path/status
+  - Request duration histogram
+  - Active connections gauge
+  - Content entries gauge (per schema)
+  - Upload count and total size
+  - Uses `metrics` + `metrics-exporter-prometheus` crates
+  - Endpoint sits outside auth middleware stack
+
+### P7: Audit logging
+
+- [x] **Audit log system** — separate SQLite database for action tracking
+  - Separate SQLite DB file (`audit.db`), own pool and migrations
+  - Actions logged: login, logout, user creation, schema create/update/delete, content create/update/delete, token create/delete, import, export
+  - Each entry: timestamp, actor (user ID or "system"), action, resource type, resource ID, optional details JSON
+  - No UI — queryable via SQL for now (UI can be added later)
+  - Async writes (don't block request handling)
+
+### P8: Deployment
+
+- [x] **Dockerfile** — multi-stage build for production deployment
+  - Stage 1: Rust builder (cargo build --release)
+  - Stage 2: Minimal runtime image (debian-slim)
+  - Copies binary + templates directory
+  - Creates data volume mount points (data/, uploads/)
+  - No docker-compose — self-contained app with embedded SQLite
+  - Build and run commands documented in README
+
+### P9: Documentation
+
+- [x] **README** — comprehensive project documentation
+  - Project overview and motivation
+  - Feature list (all implemented features)
+  - Architecture overview (data flow, storage model)
+  - Getting started (build from source, Docker)
+  - Configuration (CLI flags, environment)
+  - API reference (endpoints, auth, examples)
+  - Schema format (JSON Schema extensions, upload type)
+  - Import/export workflow
+  - No emojis anywhere
+
+- [x] **Landing page** — `website/index.html` for GitHub Pages
+  - Single standalone HTML file, no frameworks or build step
+  - Developer-focused minimal aesthetic
+  - Subtle CSS animations (no JS frameworks)
+  - Explains all features with clear sections
+  - Links to https://github.com/wavefunk/substrukt
+  - Responsive design
+  - Dark/neutral color palette
 
 ## File Map
 

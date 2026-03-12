@@ -1,12 +1,26 @@
 use std::path::PathBuf;
 
-use minijinja::{Environment, path_loader};
+use minijinja::Environment;
 use minijinja_autoreload::AutoReloader;
 
 pub fn create_reloader(schemas_dir: PathBuf) -> AutoReloader {
     AutoReloader::new(move |notifier| {
         let mut env = Environment::new();
-        env.set_loader(path_loader("templates/"));
+
+        // Debug: load from filesystem with hot-reload
+        // Release: embed templates into the binary
+        #[cfg(debug_assertions)]
+        {
+            env.set_loader(minijinja::path_loader("templates/"));
+            notifier.set_fast_reload(true);
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = notifier;
+            minijinja_embed::load_templates!(&mut env);
+        }
+
         // Default base_template — overridden to "_partial.html" for htmx requests
         env.add_global("base_template", minijinja::Value::from("base.html"));
         let sd = schemas_dir.clone();
@@ -22,10 +36,8 @@ pub fn create_reloader(schemas_dir: PathBuf) -> AutoReloader {
                 })
                 .collect()
         });
-        notifier.set_fast_reload(true);
         Ok(env)
     })
-
 }
 
 /// Returns the base template name based on whether this is an htmx request.
