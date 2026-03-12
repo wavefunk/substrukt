@@ -5,8 +5,9 @@ pub mod schemas;
 pub mod settings;
 pub mod uploads;
 
-use axum::{Router, extract::State, middleware, response::Html};
+use axum::{Router, extract::State, middleware, response::{Html, IntoResponse}};
 use axum_htmx::HxRequest;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_sessions::Session;
 
 use crate::auth::{require_auth, verify_csrf};
@@ -32,7 +33,17 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
         .fallback(not_found)
+        .layer(CatchPanicLayer::custom(handle_panic))
         .with_state(state)
+}
+
+fn handle_panic(_err: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
+    let html = "<h1>500</h1><p>Internal server error</p>";
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        Html(html.to_string()),
+    )
+        .into_response()
 }
 
 async fn not_found(
