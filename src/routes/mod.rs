@@ -1,6 +1,7 @@
 pub mod api;
 pub mod auth;
 pub mod content;
+pub mod publish;
 pub mod schemas;
 pub mod settings;
 pub mod uploads;
@@ -27,6 +28,7 @@ pub fn build_router(state: AppState) -> Router {
     let content_routes = content::routes();
     let upload_routes = uploads::routes();
     let settings_routes = settings::routes();
+    let publish_routes = publish::routes();
 
     Router::new()
         .merge(auth_routes)
@@ -34,6 +36,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/content", content_routes)
         .nest("/uploads", upload_routes)
         .nest("/settings", settings_routes)
+        .nest("/publish", publish_routes)
         .route("/", axum::routing::get(dashboard))
         .layer(middleware::from_fn(verify_csrf))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
