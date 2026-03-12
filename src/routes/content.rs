@@ -241,6 +241,8 @@ async fn create_entry(
                 &schema_file,
                 &id,
             );
+            let user_id = auth::current_user_id(&session).await.unwrap_or(0);
+            state.audit.log(&user_id.to_string(), "content_create", "content", &format!("{schema_slug}/{id}"), None);
             auth::set_flash(&session, "success", "Entry created").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
@@ -313,6 +315,8 @@ async fn update_entry(
                 &schema_file,
                 &entry_id,
             );
+            let user_id = auth::current_user_id(&session).await.unwrap_or(0);
+            state.audit.log(&user_id.to_string(), "content_update", "content", &format!("{schema_slug}/{entry_id}"), None);
             auth::set_flash(&session, "success", "Entry updated").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
@@ -325,6 +329,7 @@ async fn update_entry(
 
 async fn delete_entry(
     State(state): State<AppState>,
+    session: Session,
     Path((schema_slug, entry_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
     let schema_file = match schema::get_schema(&state.config.schemas_dir(), &schema_slug) {
@@ -335,6 +340,9 @@ async fn delete_entry(
     let _ = content::delete_entry(&state.config.content_dir(), &schema_file, &entry_id);
     let key = format!("{schema_slug}/{entry_id}");
     state.cache.remove(&key);
+
+    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
+    state.audit.log(&user_id.to_string(), "content_delete", "content", &format!("{schema_slug}/{entry_id}"), None);
 
     axum::http::StatusCode::NO_CONTENT
 }

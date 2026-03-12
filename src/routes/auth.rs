@@ -61,6 +61,7 @@ async fn login_submit(
                 tracing::error!("Failed to create session: {e}");
                 return Redirect::to("/login").into_response();
             }
+            state.audit.log(&user.id.to_string(), "login", "session", "", None);
             Redirect::to("/").into_response()
         }
         _ => {
@@ -82,8 +83,11 @@ async fn login_submit(
     }
 }
 
-async fn logout(session: Session) -> Redirect {
+async fn logout(State(state): State<AppState>, session: Session) -> Redirect {
+    let user_id = auth::current_user_id(&session).await;
     let _ = auth::logout_user(&session).await;
+    let actor = user_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
+    state.audit.log(&actor, "logout", "session", "", None);
     Redirect::to("/login")
 }
 
@@ -151,6 +155,7 @@ async fn setup_submit(
     match models::create_user(&state.pool, &form.username, &form.password).await {
         Ok(user) => {
             let _ = auth::login_user(&session, user.id).await;
+            state.audit.log(&user.id.to_string(), "user_create", "user", &user.id.to_string(), None);
             Redirect::to("/").into_response()
         }
         Err(e) => {

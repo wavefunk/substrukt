@@ -5,6 +5,7 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use minijinja_autoreload::AutoReloader;
 use sqlx::SqlitePool;
 
+use crate::audit::AuditLogger;
 use crate::config::Config;
 use crate::rate_limit::RateLimiter;
 
@@ -18,6 +19,7 @@ pub struct AppStateInner {
     pub login_limiter: RateLimiter,
     pub api_limiter: RateLimiter,
     pub metrics_handle: PrometheusHandle,
+    pub audit: AuditLogger,
 }
 
 pub type AppState = Arc<AppStateInner>;

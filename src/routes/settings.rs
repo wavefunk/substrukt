@@ -80,9 +80,11 @@ async fn create_token(
     let raw_token = token::generate_token();
     let token_hash = token::hash_token(&raw_token);
 
-    models::create_api_token(&state.pool, user_id, &form.name, &token_hash)
+    let api_token = models::create_api_token(&state.pool, user_id, &form.name, &token_hash)
         .await
         .map_err(|e| format!("DB error: {e}"))?;
+
+    state.audit.log(&user_id.to_string(), "token_create", "api_token", &api_token.id.to_string(), None);
 
     let tokens = models::list_api_tokens(&state.pool, user_id)
         .await
@@ -124,5 +126,6 @@ async fn delete_token(
     };
 
     let _ = models::delete_api_token(&state.pool, token_id, user_id).await;
+    state.audit.log(&user_id.to_string(), "token_delete", "api_token", &token_id.to_string(), None);
     Redirect::to("/settings/tokens")
 }

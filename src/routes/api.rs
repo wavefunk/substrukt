@@ -196,6 +196,7 @@ async fn create_entry(
                 &schema_file,
                 &id,
             );
+            state.audit.log("api", "content_create", "content", &format!("{schema_slug}/{id}"), None);
             (StatusCode::CREATED, Json(serde_json::json!({"id": id}))).into_response()
         }
         Err(e) => (
@@ -245,6 +246,7 @@ async fn update_entry(
                 &schema_file,
                 &entry_id,
             );
+            state.audit.log("api", "content_update", "content", &format!("{schema_slug}/{entry_id}"), None);
             StatusCode::OK.into_response()
         }
         Err(e) => (
@@ -276,6 +278,7 @@ async fn delete_entry(
         Ok(()) => {
             let key = format!("{schema_slug}/{entry_id}");
             state.cache.remove(&key);
+            state.audit.log("api", "content_delete", "content", &format!("{schema_slug}/{entry_id}"), None);
             StatusCode::NO_CONTENT.into_response()
         }
         Err(e) => (
@@ -354,6 +357,7 @@ async fn export_bundle(State(state): State<AppState>, _token: BearerToken) -> im
         Ok(()) => match std::fs::read(&tmp) {
             Ok(data) => {
                 let _ = std::fs::remove_file(&tmp);
+                state.audit.log("api", "export", "bundle", "", None);
                 let mut response = axum::body::Body::from(data).into_response();
                 response.headers_mut().insert(
                     axum::http::header::CONTENT_TYPE,
@@ -411,6 +415,7 @@ async fn import_bundle(
                     &state.config.schemas_dir(),
                     &state.config.content_dir(),
                 );
+                state.audit.log("api", "import", "bundle", "", None);
                 return Json(serde_json::json!({
                     "status": "ok",
                     "warnings": warnings,

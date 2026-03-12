@@ -105,6 +105,7 @@ async fn create_schema(
     session: Session,
     Form(form): Form<SchemaForm>,
 ) -> impl IntoResponse {
+    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     let schema_value: serde_json::Value = match serde_json::from_str(&form.schema_json) {
         Ok(v) => v,
         Err(e) => {
@@ -150,6 +151,7 @@ async fn create_schema(
             .into_response();
     }
 
+    state.audit.log(&user_id.to_string(), "schema_create", "schema", &slug, None);
     auth::set_flash(&session, "success", "Schema created").await;
     Redirect::to("/schemas").into_response()
 }
@@ -187,6 +189,7 @@ async fn update_schema(
     Path(slug): Path<String>,
     Form(form): Form<SchemaForm>,
 ) -> impl IntoResponse {
+    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     let schema_value: serde_json::Value = match serde_json::from_str(&form.schema_json) {
         Ok(v) => v,
         Err(e) => {
@@ -218,15 +221,19 @@ async fn update_schema(
         .into_response();
     }
 
+    state.audit.log(&user_id.to_string(), "schema_update", "schema", &slug, None);
     auth::set_flash(&session, "success", "Schema updated").await;
     Redirect::to("/schemas").into_response()
 }
 
 async fn delete_schema(
     State(state): State<AppState>,
+    session: Session,
     Path(slug): Path<String>,
 ) -> impl IntoResponse {
+    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     let _ = schema::delete_schema(&state.config.schemas_dir(), &slug);
+    state.audit.log(&user_id.to_string(), "schema_delete", "schema", &slug, None);
     axum::http::StatusCode::NO_CONTENT
 }
 

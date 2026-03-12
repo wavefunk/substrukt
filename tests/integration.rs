@@ -46,6 +46,10 @@ impl TestServer {
             .build_recorder()
             .handle();
 
+        let audit_db_path = data_dir.path().join("audit.db");
+        let audit_pool = substrukt::audit::init_pool(&audit_db_path).await.unwrap();
+        let audit_logger = substrukt::audit::AuditLogger::new(audit_pool);
+
         let state = Arc::new(AppStateInner {
             pool,
             config,
@@ -54,6 +58,7 @@ impl TestServer {
             login_limiter: RateLimiter::new(100, std::time::Duration::from_secs(60)),
             api_limiter: RateLimiter::new(1000, std::time::Duration::from_secs(60)),
             metrics_handle,
+            audit: audit_logger,
         });
 
         let app = routes::build_router(state).layer(session_layer);

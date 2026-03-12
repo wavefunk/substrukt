@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::SqliteStore;
 
+use substrukt::audit;
 use substrukt::auth;
 use substrukt::cache;
 use substrukt::config::Config;
@@ -130,6 +131,11 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     // Prometheus metrics
     let metrics_handle = metrics::setup_recorder();
 
+    // Audit logging (separate database)
+    let audit_db_path = config.data_dir.join("audit.db");
+    let audit_pool = audit::init_pool(&audit_db_path).await?;
+    let audit_logger = audit::AuditLogger::new(audit_pool);
+
     let state = Arc::new(AppStateInner {
         pool,
         config: config.clone(),
@@ -138,6 +144,7 @@ async fn run_server(config: Config) -> eyre::Result<()> {
         login_limiter: RateLimiter::new(10, std::time::Duration::from_secs(60)),
         api_limiter: RateLimiter::new(100, std::time::Duration::from_secs(60)),
         metrics_handle,
+        audit: audit_logger,
     });
 
     // File watcher for cache invalidation
