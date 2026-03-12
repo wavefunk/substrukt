@@ -15,7 +15,9 @@ pub fn routes() -> Router<AppState> {
         .route("/{slug}/edit", get(edit_schema_page))
         .route(
             "/{slug}",
-            axum::routing::put(update_schema).delete(delete_schema),
+            axum::routing::post(update_schema)
+                .put(update_schema)
+                .delete(delete_schema),
         )
 }
 
@@ -193,7 +195,7 @@ async fn delete_schema(
     Path(slug): Path<String>,
 ) -> impl IntoResponse {
     let _ = schema::delete_schema(&state.config.schemas_dir(), &slug);
-    Redirect::to("/schemas").into_response()
+    axum::http::StatusCode::NO_CONTENT
 }
 
 async fn render_schema_edit(

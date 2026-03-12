@@ -121,7 +121,7 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     let session_layer = SessionManagerLayer::new(session_store);
 
     // Template environment
-    let env = templates::create_environment();
+    let env = templates::create_environment(config.schemas_dir());
 
     // Content cache
     let content_cache = DashMap::new();

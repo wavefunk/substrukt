@@ -288,14 +288,14 @@ async fn delete_entry(
 ) -> impl IntoResponse {
     let schema_file = match schema::get_schema(&state.config.schemas_dir(), &schema_slug) {
         Ok(Some(s)) => s,
-        _ => return Redirect::to("/schemas"),
+        _ => return axum::http::StatusCode::NOT_FOUND,
     };
 
     let _ = content::delete_entry(&state.config.content_dir(), &schema_file, &entry_id);
     let key = format!("{schema_slug}/{entry_id}");
     state.cache.remove(&key);
 
-    Redirect::to(&format!("/content/{schema_slug}"))
+    axum::http::StatusCode::NO_CONTENT
 }
 
 struct UploadField {
