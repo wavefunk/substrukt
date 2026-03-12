@@ -34,6 +34,7 @@
               cargo-expand
               bacon
               claude-code
+              cargo-dist
             ];
 
             buildInputs = [
