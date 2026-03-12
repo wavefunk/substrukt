@@ -118,7 +118,8 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     // Session store
     let session_store = SqliteStore::new(pool.clone());
     session_store.migrate().await?;
-    let session_layer = SessionManagerLayer::new(session_store);
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false);
 
     // Template environment
     let env = templates::create_environment(config.schemas_dir());
