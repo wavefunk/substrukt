@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Substrukt - Schema-driven CMS</title>
+  <style>
+    :root {
+      --bg: #0e0e10;
+      --surface: #18181b;
+      --border: #27272a;
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --accent: #a78bfa;
+      --accent-dim: #7c5cbf;
+      --code-bg: #1e1e22;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    header a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    header a:hover { color: var(--text); }
+
+    /* Hero */
+    .hero {
+      padding: 96px 0 72px;
+      text-align: center;
+    }
+
+    .hero h2 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      animation: fadeUp 0.6s ease-out;
+    }
+
+    .hero h2 span {
+      background: linear-gradient(135deg, var(--accent), #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 1.15rem;
+      max-width: 560px;
+      margin: 0 auto 36px;
+      animation: fadeUp 0.6s ease-out 0.1s both;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      animation: fadeUp 0.6s ease-out 0.2s both;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0e0e10;
+    }
+
+    .btn-primary:hover {
+      background: #b89dfc;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--muted);
+      transform: translateY(-1px);
+    }
+
+    /* Features */
+    .features {
+      padding: 72px 0;
+    }
+
+    .features h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent-dim);
+      transform: translateY(-2px);
+    }
+
+    .feature-card h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    /* How it works */
+    .how-it-works {
+      padding: 72px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .how-it-works h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 32px;
+    }
+
+    .step {
+      text-align: center;
+    }
+
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 16px;
+    }
+
+    .step h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .step p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* Code */
+    .code-section {
+      padding: 72px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .code-section h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      overflow-x: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    pre .comment { color: #52525b; }
+    pre .key { color: var(--accent); }
+    pre .string { color: #86efac; }
+    pre .cmd { color: var(--text); }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding: 64px 0 48px; }
+      .hero h2 { font-size: 2rem; }
+      .hero p { font-size: 1rem; }
+      .hero-actions { flex-direction: column; align-items: center; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <h1>substrukt</h1>
+      <a href="https://github.com/wavefunk/substrukt">GitHub</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h2>Schema-driven CMS<br>built in <span>Rust</span></h2>
+      <p>Define content types with JSON Schema. Edit through a web UI. Store as files. Serve via API.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/wavefunk/substrukt" class="btn btn-primary">View on GitHub</a>
+        <a href="#quickstart" class="btn btn-secondary">Quick start</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="container">
+      <h3>Features</h3>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>Schema-driven forms</h4>
+          <p>Define content types with JSON Schema. The UI generates forms automatically from your schema, including nested objects, arrays, and file uploads.</p>
+        </div>
+        <div class="feature-card">
+          <h4>File-based content</h4>
+          <p>Content is stored as JSON files on disk, not in a database. Easy to inspect, version control, and migrate. In-memory caching keeps reads fast.</p>
+        </div>
+        <div class="feature-card">
+          <h4>REST API</h4>
+          <p>Every content type gets full CRUD endpoints. Bearer token auth. Export and import bundles for syncing between environments.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Content-addressed uploads</h4>
+          <p>Files are stored by SHA-256 hash with automatic deduplication. Upload the same file twice, it is stored once.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Single binary</h4>
+          <p>One Rust binary, no runtime dependencies. SQLite for auth. Templates and static assets are served directly. Docker image included.</p>
+        </div>
+        <div class="feature-card">
+          <h4>Observability</h4>
+          <p>Prometheus metrics endpoint, structured logging with tracing, and a separate audit log database tracking all mutations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-it-works">
+    <div class="container">
+      <h3>How it works</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h4>Define a schema</h4>
+          <p>Create a JSON Schema with an x-substrukt extension that sets the title, slug, and storage mode.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h4>Edit content</h4>
+          <p>The web UI generates a form from your schema. Create, edit, and delete entries through the browser.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h4>Consume via API</h4>
+          <p>Content is served as JSON through the REST API. Use bearer tokens for authentication.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <h4>Sync and deploy</h4>
+          <p>Export/import bundles to move content between local and production. Automate with CI.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="code-section" id="quickstart">
+    <div class="container">
+      <h3>Quick start</h3>
+      <pre><code><span class="comment"># Build from source</span>
+<span class="cmd">git clone https://github.com/wavefunk/substrukt.git</span>
+<span class="cmd">cd substrukt</span>
+<span class="cmd">cargo build --release</span>
+<span class="cmd">./target/release/substrukt serve</span>
+
+<span class="comment"># Or run with Docker</span>
+<span class="cmd">docker build -t substrukt .</span>
+<span class="cmd">docker run -p 3000:3000 -v substrukt-data:/data substrukt</span></code></pre>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>substrukt -- <a href="https://github.com/wavefunk/substrukt">source on GitHub</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>
