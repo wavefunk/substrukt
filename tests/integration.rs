@@ -23,16 +23,23 @@ struct TestServer {
 
 impl TestServer {
     async fn start() -> Self {
+        Self::start_with_webhooks(None, None).await
+    }
+
+    async fn start_with_webhooks(
+        staging_webhook_url: Option<String>,
+        production_webhook_url: Option<String>,
+    ) -> Self {
         let data_dir = tempfile::tempdir().unwrap();
         let db_path = data_dir.path().join("test.db");
         let config = Config::new(
             Some(data_dir.path().to_path_buf()),
             Some(db_path),
-            Some(0), // port 0 = OS assigns random port
-            false,   // no HTTPS in tests
-            None,    // staging_webhook_url
-            None,    // production_webhook_url
-            None,    // webhook_check_interval
+            Some(0),
+            false,
+            staging_webhook_url,
+            production_webhook_url,
+            Some(3600), // long interval so cron doesn't fire during tests
         );
         config.ensure_dirs().unwrap();
 
@@ -1298,6 +1305,164 @@ async fn single_full_workflow() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// ── Publish webhook tests ────────────────────────────────────
+
+#[tokio::test]
+async fn test_publish_api_no_webhook_configured() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("publish-test").await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Staging publish should 404 when no webhook URL configured
+    let resp = api
+        .post(s.url("/api/v1/publish/staging"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // Production publish should 404 when no webhook URL configured
+    let resp = api
+        .post(s.url("/api/v1/publish/production"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // Unknown environment should 404
+    let resp = api
+        .post(s.url("/api/v1/publish/unknown"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_publish_api_fires_webhook() {
+    // Start a mock webhook receiver
+    let (webhook_tx, mut webhook_rx) = tokio::sync::mpsc::channel::<String>(1);
+    let mock_app =
+        axum::Router::new().route(
+            "/webhook",
+            axum::routing::post(move |body: String| {
+                let tx = webhook_tx.clone();
+                async move {
+                    let _ = tx.send(body).await;
+                    "ok"
+                }
+            }),
+        );
+    let mock_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_addr = mock_listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(mock_listener, mock_app).await.unwrap() });
+
+    let webhook_url = format!("http://{mock_addr}/webhook");
+
+    let s =
+        TestServer::start_with_webhooks(Some(webhook_url.clone()), Some(webhook_url)).await;
+    s.setup_admin().await;
+    let token = s.create_api_token("webhook-test").await;
+    s.create_schema(BLOG_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Fire staging publish
+    let resp = api
+        .post(s.url("/api/v1/publish/staging"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], "triggered");
+
+    // Verify webhook was received
+    let payload = tokio::time::timeout(std::time::Duration::from_secs(2), webhook_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["event_type"], "substrukt-publish");
+    assert_eq!(payload["environment"], "staging");
+    assert_eq!(payload["triggered_by"], "manual");
+}
+
+#[tokio::test]
+async fn test_dirty_state_tracking() {
+    let (webhook_tx, mut webhook_rx) = tokio::sync::mpsc::channel::<String>(10);
+    let mock_app =
+        axum::Router::new().route(
+            "/webhook",
+            axum::routing::post(move |body: String| {
+                let tx = webhook_tx.clone();
+                async move {
+                    let _ = tx.send(body).await;
+                    "ok"
+                }
+            }),
+        );
+    let mock_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_addr = mock_listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(mock_listener, mock_app).await.unwrap() });
+
+    let webhook_url = format!("http://{mock_addr}/webhook");
+    let s =
+        TestServer::start_with_webhooks(Some(webhook_url.clone()), Some(webhook_url)).await;
+    s.setup_admin().await;
+    let token = s.create_api_token("dirty-test").await;
+    s.create_schema(BLOG_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Publish staging
+    let resp = api
+        .post(s.url("/api/v1/publish/staging"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let _ = webhook_rx.recv().await;
+
+    // Publish again — should still fire (buttons always fire)
+    let resp = api
+        .post(s.url("/api/v1/publish/staging"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let _ = webhook_rx.recv().await;
+
+    // Production was never published — fires too
+    let resp = api
+        .post(s.url("/api/v1/publish/production"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = webhook_rx.recv().await.unwrap();
+    let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["environment"], "production");
 }
 
 // ── Helpers ──────────────────────────────────────────────────
