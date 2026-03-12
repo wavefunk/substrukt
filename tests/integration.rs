@@ -993,6 +993,25 @@ async fn single_list_redirects_to_edit() {
     );
 }
 
+#[tokio::test]
+async fn single_edit_page_shows_empty_form_when_unsaved() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    s.create_schema(SETTINGS_SCHEMA).await;
+
+    // Edit page for unsaved single should show empty form, not 404
+    let resp = s
+        .client
+        .get(s.url("/content/site-settings/_single/edit"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("Site Settings"), "Should show schema title");
+    assert!(body.contains("<input"), "Should show form fields");
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 /// Extract the first entry ID from a content list page's edit links.

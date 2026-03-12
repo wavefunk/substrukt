@@ -169,10 +169,18 @@ async fn edit_entry_page(
         .ok_or("Schema not found")?;
 
     let entry = content::get_entry(&state.config.content_dir(), &schema_file, &entry_id)
-        .map_err(|e| format!("Error: {e}"))?
-        .ok_or("Entry not found")?;
+        .map_err(|e| format!("Error: {e}"))?;
 
-    let form_html = content_form::render_form_fields(&schema_file.schema, Some(&entry.data), "");
+    let (existing_data, is_new) = if let Some(entry) = entry {
+        (Some(entry.data), false)
+    } else if entry_id == "_single" && schema_file.meta.kind == Kind::Single {
+        (None, true)
+    } else {
+        return Err("Entry not found".into());
+    };
+
+    let form_html =
+        content_form::render_form_fields(&schema_file.schema, existing_data.as_ref(), "");
 
     let tmpl = state
         .templates
@@ -181,6 +189,7 @@ async fn edit_entry_page(
     let template = tmpl
         .get_template("content/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;
+    let is_single = schema_file.meta.kind == Kind::Single;
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
@@ -188,7 +197,8 @@ async fn edit_entry_page(
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             entry_id => entry_id,
-            is_new => false,
+            is_new => is_new,
+            is_single => is_single,
             form_fields => form_html,
         })
         .map_err(|e| format!("Render error: {e}"))?;
