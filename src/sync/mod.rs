@@ -14,20 +14,23 @@ pub async fn export_bundle(data_dir: &Path, pool: &SqlitePool, output: &Path) ->
 
     // Write uploads-manifest.json from SQLite
     let upload_rows = sqlx::query_as::<_, (String, String, String, i64, String)>(
-        "SELECT hash, filename, mime, size, created_at FROM uploads"
+        "SELECT hash, filename, mime, size, created_at FROM uploads",
     )
     .fetch_all(pool)
     .await?;
 
-    let manifest: Vec<serde_json::Value> = upload_rows.iter().map(|(hash, filename, mime, size, created_at)| {
-        serde_json::json!({
-            "hash": hash,
-            "filename": filename,
-            "mime": mime,
-            "size": size,
-            "created_at": created_at,
+    let manifest: Vec<serde_json::Value> = upload_rows
+        .iter()
+        .map(|(hash, filename, mime, size, created_at)| {
+            serde_json::json!({
+                "hash": hash,
+                "filename": filename,
+                "mime": mime,
+                "size": size,
+                "created_at": created_at,
+            })
         })
-    }).collect();
+        .collect();
 
     let manifest_json = serde_json::to_string_pretty(&manifest)?;
     let manifest_bytes = manifest_json.as_bytes();
@@ -51,7 +54,11 @@ pub async fn export_bundle(data_dir: &Path, pool: &SqlitePool, output: &Path) ->
 }
 
 /// Import a tar.gz bundle into the data directory (overwrite strategy).
-pub async fn import_bundle(data_dir: &Path, pool: &SqlitePool, input: &Path) -> eyre::Result<Vec<String>> {
+pub async fn import_bundle(
+    data_dir: &Path,
+    pool: &SqlitePool,
+    input: &Path,
+) -> eyre::Result<Vec<String>> {
     let file = std::fs::File::open(input)?;
     let dec = GzDecoder::new(file);
     let mut archive = tar::Archive::new(dec);
@@ -64,7 +71,11 @@ pub async fn import_bundle(data_dir: &Path, pool: &SqlitePool, input: &Path) -> 
 }
 
 /// Import from bytes (for API endpoint).
-pub async fn import_bundle_from_bytes(data_dir: &Path, pool: &SqlitePool, data: &[u8]) -> eyre::Result<Vec<String>> {
+pub async fn import_bundle_from_bytes(
+    data_dir: &Path,
+    pool: &SqlitePool,
+    data: &[u8],
+) -> eyre::Result<Vec<String>> {
     let dec = GzDecoder::new(data);
     let mut archive = tar::Archive::new(dec);
     archive.unpack(data_dir)?;

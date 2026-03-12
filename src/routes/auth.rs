@@ -36,7 +36,12 @@ async fn login_page(
     session: Session,
 ) -> axum::response::Result<Html<String>> {
     let csrf_token = ensure_csrf_token(&session).await;
-    render_template(&state, "login.html", minijinja::context! { csrf_token => csrf_token }).await
+    render_template(
+        &state,
+        "login.html",
+        minijinja::context! { csrf_token => csrf_token },
+    )
+    .await
 }
 
 async fn login_submit(
@@ -61,7 +66,9 @@ async fn login_submit(
                 tracing::error!("Failed to create session: {e}");
                 return Redirect::to("/login").into_response();
             }
-            state.audit.log(&user.id.to_string(), "login", "session", "", None);
+            state
+                .audit
+                .log(&user.id.to_string(), "login", "session", "", None);
             Redirect::to("/").into_response()
         }
         _ => {
@@ -86,7 +93,9 @@ async fn login_submit(
 async fn logout(State(state): State<AppState>, session: Session) -> Redirect {
     let user_id = auth::current_user_id(&session).await;
     let _ = auth::logout_user(&session).await;
-    let actor = user_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
+    let actor = user_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     state.audit.log(&actor, "logout", "session", "", None);
     Redirect::to("/login")
 }
@@ -103,7 +112,12 @@ async fn setup_page(
         return Ok(Redirect::to("/login").into_response());
     }
     let csrf_token = ensure_csrf_token(&session).await;
-    let html = render_template(&state, "setup.html", minijinja::context! { csrf_token => csrf_token }).await?;
+    let html = render_template(
+        &state,
+        "setup.html",
+        minijinja::context! { csrf_token => csrf_token },
+    )
+    .await?;
     Ok(html.into_response())
 }
 
@@ -155,7 +169,13 @@ async fn setup_submit(
     match models::create_user(&state.pool, &form.username, &form.password).await {
         Ok(user) => {
             let _ = auth::login_user(&session, user.id).await;
-            state.audit.log(&user.id.to_string(), "user_create", "user", &user.id.to_string(), None);
+            state.audit.log(
+                &user.id.to_string(),
+                "user_create",
+                "user",
+                &user.id.to_string(),
+                None,
+            );
             Redirect::to("/").into_response()
         }
         Err(e) => {
@@ -170,7 +190,10 @@ async fn render_template(
     name: &str,
     ctx: minijinja::Value,
 ) -> axum::response::Result<Html<String>> {
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template(name)
         .map_err(|e| format!("Template error: {e}"))?;
@@ -181,10 +204,10 @@ async fn render_template(
 }
 
 fn client_ip(headers: &HeaderMap) -> String {
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first_ip) = xff.split(',').next() {
-            return first_ip.trim().to_string();
-        }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
+        && let Some(first_ip) = xff.split(',').next()
+    {
+        return first_ip.trim().to_string();
     }
     "unknown".to_string()
 }

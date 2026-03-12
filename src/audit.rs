@@ -27,7 +27,14 @@ impl AuditLogger {
         }
     }
 
-    pub fn log(&self, actor: &str, action: &str, resource_type: &str, resource_id: &str, details: Option<&str>) {
+    pub fn log(
+        &self,
+        actor: &str,
+        action: &str,
+        resource_type: &str,
+        resource_id: &str,
+        details: Option<&str>,
+    ) {
         let pool = self.pool.clone();
         let timestamp = chrono::Utc::now().to_rfc3339();
         let actor = actor.to_string();

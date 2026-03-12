@@ -5,7 +5,12 @@ pub mod schemas;
 pub mod settings;
 pub mod uploads;
 
-use axum::{Router, extract::State, middleware, response::{Html, IntoResponse}};
+use axum::{
+    Router,
+    extract::State,
+    middleware,
+    response::{Html, IntoResponse},
+};
 use axum_htmx::HxRequest;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_sessions::Session;
@@ -61,14 +66,14 @@ pub fn render_error(state: &AppState, status: u16, message: &str, is_htmx: bool)
     let Ok(tmpl) = state.templates.acquire_env() else {
         return format!("<h1>{status}</h1><p>{message}</p>");
     };
-    if let Ok(template) = tmpl.get_template("error.html") {
-        if let Ok(html) = template.render(minijinja::context! {
+    if let Ok(template) = tmpl.get_template("error.html")
+        && let Ok(html) = template.render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
             status => status,
             message => message,
-        }) {
-            return html;
-        }
+        })
+    {
+        return html;
     }
     format!("<h1>{status}</h1><p>{message}</p>")
 }
@@ -86,7 +91,9 @@ async fn dashboard(
         .map(|entries| entries.len())
         .sum();
 
-    let tmpl = state.templates.acquire_env()
+    let tmpl = state
+        .templates
+        .acquire_env()
         .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("dashboard.html")

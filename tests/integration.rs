@@ -69,7 +69,9 @@ impl TestServer {
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
             axum::serve(listener, app)
-                .with_graceful_shutdown(async { rx.await.ok(); })
+                .with_graceful_shutdown(async {
+                    rx.await.ok();
+                })
                 .await
                 .unwrap();
         });
@@ -126,7 +128,8 @@ impl TestServer {
     /// Create an API token via the settings UI and extract the raw token from the response.
     async fn create_api_token(&self, name: &str) -> String {
         let csrf = self.get_csrf("/settings/tokens").await;
-        let resp = self.client
+        let resp = self
+            .client
             .post(self.url("/settings/tokens"))
             .form(&[("name", name), ("_csrf", &csrf)])
             .send()
@@ -158,7 +161,9 @@ async fn auth_redirects_to_setup_when_no_users() {
 async fn auth_setup_creates_admin_and_sets_session() {
     let s = TestServer::start().await;
     let csrf = s.get_csrf("/setup").await;
-    let resp = s.client.post(s.url("/setup"))
+    let resp = s
+        .client
+        .post(s.url("/setup"))
         .form(&[
             ("username", "admin"),
             ("password", "testpassword"),
@@ -193,7 +198,9 @@ async fn auth_login_and_logout() {
 
     // Logout (get CSRF from dashboard which has nav with logout form)
     let csrf = s.get_csrf("/").await;
-    let resp = s.client.post(s.url("/logout"))
+    let resp = s
+        .client
+        .post(s.url("/logout"))
         .form(&[("_csrf", csrf.as_str())])
         .send()
         .await
@@ -207,8 +214,14 @@ async fn auth_login_and_logout() {
 
     // Login again
     let csrf = s.get_csrf("/login").await;
-    let resp = s.client.post(s.url("/login"))
-        .form(&[("username", "admin"), ("password", "testpassword"), ("_csrf", csrf.as_str())])
+    let resp = s
+        .client
+        .post(s.url("/login"))
+        .form(&[
+            ("username", "admin"),
+            ("password", "testpassword"),
+            ("_csrf", csrf.as_str()),
+        ])
         .send()
         .await
         .unwrap();
@@ -235,7 +248,9 @@ async fn schema_create_and_list() {
     s.setup_admin().await;
 
     let csrf = s.get_csrf("/schemas/new").await;
-    let resp = s.client.post(s.url("/schemas/new"))
+    let resp = s
+        .client
+        .post(s.url("/schemas/new"))
         .form(&[("schema_json", BLOG_SCHEMA), ("_csrf", &csrf)])
         .send()
         .await
@@ -254,13 +269,20 @@ async fn schema_edit_and_update() {
     s.create_schema(BLOG_SCHEMA).await;
 
     // Edit page loads
-    let resp = s.client.get(s.url("/schemas/blog-posts/edit")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/schemas/blog-posts/edit"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Update via POST
     let csrf = s.get_csrf("/schemas/blog-posts/edit").await;
     let updated = BLOG_SCHEMA.replace("Blog Posts", "Articles");
-    let resp = s.client.post(s.url("/schemas/blog-posts"))
+    let resp = s
+        .client
+        .post(s.url("/schemas/blog-posts"))
         .form(&[("schema_json", updated.as_str()), ("_csrf", &csrf)])
         .send()
         .await
@@ -275,7 +297,9 @@ async fn schema_delete() {
     s.create_schema(BLOG_SCHEMA).await;
 
     let csrf = s.get_csrf("/schemas/blog-posts/edit").await;
-    let resp = s.client.delete(s.url("/schemas/blog-posts"))
+    let resp = s
+        .client
+        .delete(s.url("/schemas/blog-posts"))
         .header("X-CSRF-Token", &csrf)
         .send()
         .await
@@ -292,7 +316,12 @@ async fn content_create_and_list() {
     s.create_schema(BLOG_SCHEMA).await;
 
     // New entry page
-    let resp = s.client.get(s.url("/content/blog-posts/new")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/content/blog-posts/new"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.text().await.unwrap();
     assert!(body.contains("<input"), "Form should have input fields");
@@ -305,7 +334,9 @@ async fn content_create_and_list() {
         .text("title", "Hello World")
         .text("body", "First post")
         .text("published", "true");
-    let resp = s.client.post(s.url("/content/blog-posts/new"))
+    let resp = s
+        .client
+        .post(s.url("/content/blog-posts/new"))
         .multipart(form)
         .send()
         .await
@@ -313,7 +344,12 @@ async fn content_create_and_list() {
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
 
     // Entry appears in list
-    let resp = s.client.get(s.url("/content/blog-posts")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/content/blog-posts"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("Hello World"));
 }
@@ -330,31 +366,43 @@ async fn content_edit_and_delete() {
         .text("_csrf", csrf)
         .text("title", "To Edit")
         .text("body", "Original");
-    s.client.post(s.url("/content/blog-posts/new"))
+    s.client
+        .post(s.url("/content/blog-posts/new"))
         .multipart(form)
         .send()
         .await
         .unwrap();
 
     // Find entry ID from list page
-    let resp = s.client.get(s.url("/content/blog-posts")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/content/blog-posts"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     let entry_id = extract_entry_id(&body, "blog-posts").expect("should find entry link");
 
     // Edit page loads
-    let resp = s.client.get(s.url(&format!("/content/blog-posts/{entry_id}/edit")))
+    let resp = s
+        .client
+        .get(s.url(&format!("/content/blog-posts/{entry_id}/edit")))
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Update
-    let csrf = s.get_csrf(&format!("/content/blog-posts/{entry_id}/edit")).await;
+    let csrf = s
+        .get_csrf(&format!("/content/blog-posts/{entry_id}/edit"))
+        .await;
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("title", "Edited Title")
         .text("body", "Updated body");
-    let resp = s.client.post(s.url(&format!("/content/blog-posts/{entry_id}")))
+    let resp = s
+        .client
+        .post(s.url(&format!("/content/blog-posts/{entry_id}")))
         .multipart(form)
         .send()
         .await
@@ -362,13 +410,20 @@ async fn content_edit_and_delete() {
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
 
     // Verify update
-    let resp = s.client.get(s.url("/content/blog-posts")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/content/blog-posts"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("Edited Title"));
 
     // Delete
     let csrf = s.get_csrf("/content/blog-posts").await;
-    let resp = s.client.delete(s.url(&format!("/content/blog-posts/{entry_id}")))
+    let resp = s
+        .client
+        .delete(s.url(&format!("/content/blog-posts/{entry_id}")))
         .header("X-CSRF-Token", &csrf)
         .send()
         .await
@@ -403,7 +458,9 @@ async fn upload_create_and_serve() {
         .text("_csrf", csrf)
         .text("title", "My Photo")
         .part("image", file_part);
-    let resp = s.client.post(s.url("/content/gallery/new"))
+    let resp = s
+        .client
+        .post(s.url("/content/gallery/new"))
         .multipart(form)
         .send()
         .await
@@ -411,20 +468,32 @@ async fn upload_create_and_serve() {
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
 
     // Get entry to find upload hash
-    let resp = s.client.get(s.url("/content/gallery")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/content/gallery"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     let entry_id = extract_entry_id(&body, "gallery").expect("should find entry");
 
-    let resp = s.client.get(s.url(&format!("/content/gallery/{entry_id}/edit")))
+    let resp = s
+        .client
+        .get(s.url(&format!("/content/gallery/{entry_id}/edit")))
         .send()
         .await
         .unwrap();
     let edit_body = resp.text().await.unwrap();
-    assert!(edit_body.contains("Current:"), "Edit should show current upload");
+    assert!(
+        edit_body.contains("Current:"),
+        "Edit should show current upload"
+    );
 
     // Extract upload hash from the edit page link
     if let Some(hash) = extract_upload_hash(&edit_body) {
-        let resp = s.client.get(s.url(&format!("/uploads/file/{hash}/photo.png")))
+        let resp = s
+            .client
+            .get(s.url(&format!("/uploads/file/{hash}/photo.png")))
             .send()
             .await
             .unwrap();
@@ -451,7 +520,8 @@ async fn upload_dedup() {
             .text("_csrf", csrf)
             .text("title", title.to_string())
             .part("image", file_part);
-        s.client.post(s.url("/content/gallery/new"))
+        s.client
+            .post(s.url("/content/gallery/new"))
             .multipart(form)
             .send()
             .await
@@ -494,12 +564,18 @@ async fn flash_message_after_schema_create() {
     // After creating a schema, the redirect to /schemas should show the flash
     let resp = s.client.get(s.url("/schemas")).send().await.unwrap();
     let body = resp.text().await.unwrap();
-    assert!(body.contains("Schema created"), "Flash message should appear after create");
+    assert!(
+        body.contains("Schema created"),
+        "Flash message should appear after create"
+    );
 
     // Second load should not show flash (consumed)
     let resp = s.client.get(s.url("/schemas")).send().await.unwrap();
     let body = resp.text().await.unwrap();
-    assert!(!body.contains("Schema created"), "Flash should be consumed after first read");
+    assert!(
+        !body.contains("Schema created"),
+        "Flash should be consumed after first read"
+    );
 }
 
 // ── API token management tests ───────────────────────────────
@@ -509,13 +585,23 @@ async fn token_create_and_list() {
     let s = TestServer::start().await;
     s.setup_admin().await;
 
-    let resp = s.client.get(s.url("/settings/tokens")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/settings/tokens"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let token = s.create_api_token("test-token").await;
     assert_eq!(token.len(), 64, "Token should be 64-char hex");
 
-    let resp = s.client.get(s.url("/settings/tokens")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/settings/tokens"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("test-token"));
 }
@@ -532,7 +618,11 @@ async fn api_requires_bearer_token() {
         .redirect(redirect::Policy::none())
         .build()
         .unwrap();
-    let resp = no_cookie_client.get(s.url("/api/v1/schemas")).send().await.unwrap();
+    let resp = no_cookie_client
+        .get(s.url("/api/v1/schemas"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
@@ -552,17 +642,25 @@ async fn api_schema_and_content_crud() {
     s.create_schema(BLOG_SCHEMA).await;
 
     // List schemas via API
-    let resp = api.get(s.url("/api/v1/schemas"))
+    let resp = api
+        .get(s.url("/api/v1/schemas"))
         .bearer_auth(&token)
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let schemas: serde_json::Value = resp.json().await.unwrap();
-    assert!(schemas.as_array().unwrap().iter().any(|s| s["slug"] == "blog-posts"));
+    assert!(
+        schemas
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["slug"] == "blog-posts")
+    );
 
     // Get single schema
-    let resp = api.get(s.url("/api/v1/schemas/blog-posts"))
+    let resp = api
+        .get(s.url("/api/v1/schemas/blog-posts"))
         .bearer_auth(&token)
         .send()
         .await
@@ -570,7 +668,8 @@ async fn api_schema_and_content_crud() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Create entry via API
-    let resp = api.post(s.url("/api/v1/content/blog-posts"))
+    let resp = api
+        .post(s.url("/api/v1/content/blog-posts"))
         .bearer_auth(&token)
         .json(&serde_json::json!({"title": "API Post", "body": "From API"}))
         .send()
@@ -581,7 +680,8 @@ async fn api_schema_and_content_crud() {
     let entry_id = created["id"].as_str().unwrap().to_string();
 
     // List entries via API
-    let resp = api.get(s.url("/api/v1/content/blog-posts"))
+    let resp = api
+        .get(s.url("/api/v1/content/blog-posts"))
         .bearer_auth(&token)
         .send()
         .await
@@ -591,7 +691,8 @@ async fn api_schema_and_content_crud() {
     assert!(!entries.as_array().unwrap().is_empty());
 
     // Get single entry
-    let resp = api.get(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
+    let resp = api
+        .get(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
         .bearer_auth(&token)
         .send()
         .await
@@ -601,7 +702,8 @@ async fn api_schema_and_content_crud() {
     assert_eq!(entry["title"], "API Post");
 
     // Update entry
-    let resp = api.put(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
+    let resp = api
+        .put(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
         .bearer_auth(&token)
         .json(&serde_json::json!({"title": "Updated API Post", "body": "Edited"}))
         .send()
@@ -610,7 +712,8 @@ async fn api_schema_and_content_crud() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Delete entry
-    let resp = api.delete(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
+    let resp = api
+        .delete(s.url(&format!("/api/v1/content/blog-posts/{entry_id}")))
         .bearer_auth(&token)
         .send()
         .await
@@ -636,14 +739,16 @@ async fn api_export_import() {
         .text("_csrf", csrf)
         .text("title", "Export Me")
         .text("body", "Content for export");
-    s.client.post(s.url("/content/blog-posts/new"))
+    s.client
+        .post(s.url("/content/blog-posts/new"))
         .multipart(form)
         .send()
         .await
         .unwrap();
 
     // Export
-    let resp = api.post(s.url("/api/v1/export"))
+    let resp = api
+        .post(s.url("/api/v1/export"))
         .bearer_auth(&token)
         .send()
         .await
@@ -667,7 +772,8 @@ async fn api_export_import() {
         .mime_str("application/gzip")
         .unwrap();
     let form = reqwest::multipart::Form::new().part("bundle", file_part);
-    let resp = api2.post(s2.url("/api/v1/import"))
+    let resp = api2
+        .post(s2.url("/api/v1/import"))
         .bearer_auth(&token2)
         .multipart(form)
         .send()
@@ -676,14 +782,18 @@ async fn api_export_import() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Verify imported content
-    let resp = api2.get(s2.url("/api/v1/content/blog-posts"))
+    let resp = api2
+        .get(s2.url("/api/v1/content/blog-posts"))
         .bearer_auth(&token2)
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let entries: serde_json::Value = resp.json().await.unwrap();
-    assert!(!entries.as_array().unwrap().is_empty(), "Imported entries should exist");
+    assert!(
+        !entries.as_array().unwrap().is_empty(),
+        "Imported entries should exist"
+    );
 }
 
 // ── Uploads browser tests ────────────────────────────────────
@@ -699,17 +809,24 @@ async fn upload_reference_tracking() {
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("title", "Test Photo")
-        .part("image", reqwest::multipart::Part::bytes(b"fake image data".to_vec())
-            .file_name("test.jpg")
-            .mime_str("image/jpeg").unwrap());
-    let resp = s.client.post(s.url("/content/gallery/new"))
+        .part(
+            "image",
+            reqwest::multipart::Part::bytes(b"fake image data".to_vec())
+                .file_name("test.jpg")
+                .mime_str("image/jpeg")
+                .unwrap(),
+        );
+    let resp = s
+        .client
+        .post(s.url("/content/gallery/new"))
         .multipart(form)
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert!(resp.status().is_redirection() || resp.status().is_success());
 
     // Check uploads page shows the upload with reference
-    let resp = s.client.get(s.url("/uploads"))
-        .send().await.unwrap();
+    let resp = s.client.get(s.url("/uploads")).send().await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.text().await.unwrap();
     assert!(body.contains("test.jpg"));
@@ -728,28 +845,47 @@ async fn uploads_browser_filtering() {
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("title", "Beach")
-        .part("image", reqwest::multipart::Part::bytes(b"beach data".to_vec())
-            .file_name("beach.jpg")
-            .mime_str("image/jpeg").unwrap());
-    s.client.post(s.url("/content/gallery/new"))
+        .part(
+            "image",
+            reqwest::multipart::Part::bytes(b"beach data".to_vec())
+                .file_name("beach.jpg")
+                .mime_str("image/jpeg")
+                .unwrap(),
+        );
+    s.client
+        .post(s.url("/content/gallery/new"))
         .multipart(form)
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
 
     // Filter by filename — should match
-    let resp = s.client.get(s.url("/uploads?q=beach"))
-        .send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/uploads?q=beach"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("beach.jpg"));
 
     // Filter by non-matching filename — should not match
-    let resp = s.client.get(s.url("/uploads?q=mountain"))
-        .send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/uploads?q=mountain"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(!body.contains("beach.jpg"));
 
     // Filter by schema
-    let resp = s.client.get(s.url("/uploads?schema=gallery"))
-        .send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/uploads?schema=gallery"))
+        .send()
+        .await
+        .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("beach.jpg"));
 }
@@ -771,17 +907,27 @@ async fn export_import_with_upload_manifest() {
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("title", "Manual")
-        .part("image", reqwest::multipart::Part::bytes(b"pdf content".to_vec())
-            .file_name("manual.pdf")
-            .mime_str("application/pdf").unwrap());
-    s.client.post(s.url("/content/gallery/new"))
+        .part(
+            "image",
+            reqwest::multipart::Part::bytes(b"pdf content".to_vec())
+                .file_name("manual.pdf")
+                .mime_str("application/pdf")
+                .unwrap(),
+        );
+    s.client
+        .post(s.url("/content/gallery/new"))
         .multipart(form)
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
 
     // Export via API
-    let resp = api.post(s.url("/api/v1/export"))
+    let resp = api
+        .post(s.url("/api/v1/export"))
         .bearer_auth(&token)
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let bundle = resp.bytes().await.unwrap();
 
@@ -800,15 +946,17 @@ async fn export_import_with_upload_manifest() {
         .mime_str("application/gzip")
         .unwrap();
     let form = reqwest::multipart::Form::new().part("bundle", file_part);
-    let resp = api2.post(s2.url("/api/v1/import"))
+    let resp = api2
+        .post(s2.url("/api/v1/import"))
         .bearer_auth(&token2)
         .multipart(form)
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert!(resp.status().is_success());
 
     // Verify upload appears in the new server's uploads browser
-    let resp = s2.client.get(s2.url("/uploads"))
-        .send().await.unwrap();
+    let resp = s2.client.get(s2.url("/uploads")).send().await.unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("manual.pdf"));
 }

@@ -204,10 +204,7 @@ pub fn validate_content(schema: &SchemaFile, data: &Value) -> Result<(), Vec<Str
 /// either a string or an object so that stored upload references pass validation.
 fn patch_upload_types(schema: &Value) -> Value {
     let mut schema = schema.clone();
-    if let Some(props) = schema
-        .get_mut("properties")
-        .and_then(|p| p.as_object_mut())
-    {
+    if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
         for (_key, prop) in props.iter_mut() {
             let is_upload = prop.get("type").and_then(|t| t.as_str()) == Some("string")
                 && prop.get("format").and_then(|f| f.as_str()) == Some("upload");
@@ -215,10 +212,7 @@ fn patch_upload_types(schema: &Value) -> Value {
                 // Allow string or object
                 if let Some(obj) = prop.as_object_mut() {
                     obj.remove("type");
-                    obj.insert(
-                        "type".to_string(),
-                        serde_json::json!(["string", "object"]),
-                    );
+                    obj.insert("type".to_string(), serde_json::json!(["string", "object"]));
                 }
             }
         }
@@ -246,12 +240,12 @@ fn generate_entry_id(schema: &SchemaFile, data: &Value) -> String {
             })
     });
 
-    if let Some(field) = id_field {
-        if let Some(val) = data.get(&field).and_then(|v| v.as_str()) {
-            let slugified = slug::slugify(val);
-            if !slugified.is_empty() {
-                return slugified;
-            }
+    if let Some(field) = id_field
+        && let Some(val) = data.get(&field).and_then(|v| v.as_str())
+    {
+        let slugified = slug::slugify(val);
+        if !slugified.is_empty() {
+            return slugified;
         }
     }
 

@@ -101,10 +101,10 @@ pub fn spawn_watcher(
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = match notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(event) = res {
-            if event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove() {
-                let _ = tx.send(());
-            }
+        if let Ok(event) = res
+            && (event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove())
+        {
+            let _ = tx.send(());
         }
     }) {
         Ok(w) => w,
@@ -132,7 +132,11 @@ pub fn spawn_watcher(
             while rx.recv_timeout(Duration::from_millis(200)).is_ok() {}
 
             tracing::debug!("File change detected, rebuilding cache");
-            rebuild(&cache_for_handler, &schemas_for_handler, &content_for_handler);
+            rebuild(
+                &cache_for_handler,
+                &schemas_for_handler,
+                &content_for_handler,
+            );
         }
     });
 

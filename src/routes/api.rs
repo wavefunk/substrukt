@@ -198,7 +198,13 @@ async fn create_entry(
                 &id,
             );
             let _ = uploads::db_update_references(&state.pool, &schema_slug, &id, &hashes).await;
-            state.audit.log("api", "content_create", "content", &format!("{schema_slug}/{id}"), None);
+            state.audit.log(
+                "api",
+                "content_create",
+                "content",
+                &format!("{schema_slug}/{id}"),
+                None,
+            );
             (StatusCode::CREATED, Json(serde_json::json!({"id": id}))).into_response()
         }
         Err(e) => (
@@ -249,8 +255,15 @@ async fn update_entry(
                 &schema_file,
                 &entry_id,
             );
-            let _ = uploads::db_update_references(&state.pool, &schema_slug, &entry_id, &hashes).await;
-            state.audit.log("api", "content_update", "content", &format!("{schema_slug}/{entry_id}"), None);
+            let _ =
+                uploads::db_update_references(&state.pool, &schema_slug, &entry_id, &hashes).await;
+            state.audit.log(
+                "api",
+                "content_update",
+                "content",
+                &format!("{schema_slug}/{entry_id}"),
+                None,
+            );
             StatusCode::OK.into_response()
         }
         Err(e) => (
@@ -283,7 +296,13 @@ async fn delete_entry(
         Ok(()) => {
             let key = format!("{schema_slug}/{entry_id}");
             state.cache.remove(&key);
-            state.audit.log("api", "content_delete", "content", &format!("{schema_slug}/{entry_id}"), None);
+            state.audit.log(
+                "api",
+                "content_delete",
+                "content",
+                &format!("{schema_slug}/{entry_id}"),
+                None,
+            );
             StatusCode::NO_CONTENT.into_response()
         }
         Err(e) => (
@@ -320,7 +339,15 @@ async fn upload_file(
             continue;
         }
 
-        match uploads::store_upload(&state.config.uploads_dir(), &state.pool, &filename, &content_type, &data).await {
+        match uploads::store_upload(
+            &state.config.uploads_dir(),
+            &state.pool,
+            &filename,
+            &content_type,
+            &data,
+        )
+        .await
+        {
             Ok(meta) => {
                 return Json(serde_json::json!({
                     "hash": meta.hash,
@@ -412,7 +439,9 @@ async fn import_bundle(
             continue;
         }
 
-        match crate::sync::import_bundle_from_bytes(&state.config.data_dir, &state.pool, &data).await {
+        match crate::sync::import_bundle_from_bytes(&state.config.data_dir, &state.pool, &data)
+            .await
+        {
             Ok(warnings) => {
                 // Rebuild cache after import
                 crate::cache::rebuild(

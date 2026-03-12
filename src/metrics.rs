@@ -37,7 +37,8 @@ pub async fn track_metrics(
     let status = response.status().as_u16().to_string();
 
     counter!("http_requests_total", "method" => method.to_string(), "path" => path.clone(), "status" => status).increment(1);
-    histogram!("http_request_duration_seconds", "method" => method.to_string(), "path" => path).record(duration);
+    histogram!("http_request_duration_seconds", "method" => method.to_string(), "path" => path)
+        .record(duration);
     gauge!("http_connections_active").decrement(1);
 
     response
@@ -64,18 +65,18 @@ fn update_content_gauges(state: &AppState) {
         let mut total_size: u64 = 0;
         if let Ok(entries) = std::fs::read_dir(&uploads_dir) {
             for prefix_entry in entries.flatten() {
-                if prefix_entry.path().is_dir() {
-                    if let Ok(files) = std::fs::read_dir(prefix_entry.path()) {
-                        for file in files.flatten() {
-                            let path = file.path();
-                            if path.is_file()
-                                && !path
-                                    .file_name()
-                                    .is_some_and(|n| n.to_string_lossy().ends_with(".meta.json"))
-                            {
-                                count += 1;
-                                total_size += file.metadata().map(|m| m.len()).unwrap_or(0);
-                            }
+                if prefix_entry.path().is_dir()
+                    && let Ok(files) = std::fs::read_dir(prefix_entry.path())
+                {
+                    for file in files.flatten() {
+                        let path = file.path();
+                        if path.is_file()
+                            && !path
+                                .file_name()
+                                .is_some_and(|n| n.to_string_lossy().ends_with(".meta.json"))
+                        {
+                            count += 1;
+                            total_size += file.metadata().map(|m| m.len()).unwrap_or(0);
                         }
                     }
                 }

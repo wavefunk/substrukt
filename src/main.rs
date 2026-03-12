@@ -120,18 +120,14 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     // Session store
     let session_store = SqliteStore::new(pool.clone());
     session_store.migrate().await?;
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(config.secure_cookies);
+    let session_layer = SessionManagerLayer::new(session_store).with_secure(config.secure_cookies);
 
     // Template environment (auto-reloads on file changes)
     let reloader = templates::create_reloader(config.schemas_dir());
 
     // Migrate .meta.json sidecars to SQLite (one-time, idempotent)
-    substrukt::uploads::migrate_meta_sidecars(
-        &config.uploads_dir(),
-        &config.data_dir,
-        &pool,
-    ).await?;
+    substrukt::uploads::migrate_meta_sidecars(&config.uploads_dir(), &config.data_dir, &pool)
+        .await?;
 
     // Content cache
     let content_cache = DashMap::new();

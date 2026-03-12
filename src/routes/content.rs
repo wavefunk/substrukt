@@ -70,7 +70,9 @@ async fn list_entries(
     let column_headers: Vec<&str> = columns.iter().map(|(_, label)| label.as_str()).collect();
 
     let flash = auth::take_flash(&session).await;
-    let tmpl = state.templates.acquire_env()
+    let tmpl = state
+        .templates
+        .acquire_env()
         .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/list.html")
@@ -130,7 +132,9 @@ async fn new_entry_page(
 
     let form_html = content_form::render_form_fields(&schema_file.schema, None, "");
 
-    let tmpl = state.templates.acquire_env()
+    let tmpl = state
+        .templates
+        .acquire_env()
         .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/edit.html")
@@ -165,7 +169,9 @@ async fn edit_entry_page(
 
     let form_html = content_form::render_form_fields(&schema_file.schema, Some(&entry.data), "");
 
-    let tmpl = state.templates.acquire_env()
+    let tmpl = state
+        .templates
+        .acquire_env()
         .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/edit.html")
@@ -204,7 +210,10 @@ async fn create_entry(
     };
 
     // Verify CSRF token from multipart form fields
-    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    let csrf_value = form_fields
+        .iter()
+        .find(|(k, _)| k == "_csrf")
+        .map(|(_, v)| v.as_str());
     if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
         return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
     }
@@ -217,18 +226,17 @@ async fn create_entry(
     // Validate
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let form_html = content_form::render_form_fields(&schema_file.schema, Some(&data), "");
-        if let Ok(tmpl) = state.templates.acquire_env() {
-            if let Ok(template) = tmpl.get_template("content/edit.html") {
-                if let Ok(html) = template.render(minijinja::context! {
-                    schema_title => schema_file.meta.title,
-                    schema_slug => schema_slug,
-                    is_new => true,
-                    form_fields => form_html,
-                    errors => errors,
-                }) {
-                    return Html(html).into_response();
-                }
-            }
+        if let Ok(tmpl) = state.templates.acquire_env()
+            && let Ok(template) = tmpl.get_template("content/edit.html")
+            && let Ok(html) = template.render(minijinja::context! {
+                schema_title => schema_file.meta.title,
+                schema_slug => schema_slug,
+                is_new => true,
+                form_fields => form_html,
+                errors => errors,
+            })
+        {
+            return Html(html).into_response();
         }
         return Redirect::to(&format!("/content/{schema_slug}/new")).into_response();
     }
@@ -244,7 +252,13 @@ async fn create_entry(
             );
             let _ = uploads::db_update_references(&state.pool, &schema_slug, &id, &hashes).await;
             let user_id = auth::current_user_id(&session).await.unwrap_or(0);
-            state.audit.log(&user_id.to_string(), "content_create", "content", &format!("{schema_slug}/{id}"), None);
+            state.audit.log(
+                &user_id.to_string(),
+                "content_create",
+                "content",
+                &format!("{schema_slug}/{id}"),
+                None,
+            );
             auth::set_flash(&session, "success", "Entry created").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
@@ -276,7 +290,10 @@ async fn update_entry(
     };
 
     // Verify CSRF token from multipart form fields
-    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    let csrf_value = form_fields
+        .iter()
+        .find(|(k, _)| k == "_csrf")
+        .map(|(_, v)| v.as_str());
     if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
         return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
     }
@@ -287,19 +304,18 @@ async fn update_entry(
 
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let form_html = content_form::render_form_fields(&schema_file.schema, Some(&data), "");
-        if let Ok(tmpl) = state.templates.acquire_env() {
-            if let Ok(template) = tmpl.get_template("content/edit.html") {
-                if let Ok(html) = template.render(minijinja::context! {
-                    schema_title => schema_file.meta.title,
-                    schema_slug => schema_slug,
-                    entry_id => entry_id,
-                    is_new => false,
-                    form_fields => form_html,
-                    errors => errors,
-                }) {
-                    return Html(html).into_response();
-                }
-            }
+        if let Ok(tmpl) = state.templates.acquire_env()
+            && let Ok(template) = tmpl.get_template("content/edit.html")
+            && let Ok(html) = template.render(minijinja::context! {
+                schema_title => schema_file.meta.title,
+                schema_slug => schema_slug,
+                entry_id => entry_id,
+                is_new => false,
+                form_fields => form_html,
+                errors => errors,
+            })
+        {
+            return Html(html).into_response();
         }
         return Redirect::to(&format!("/content/{schema_slug}/{entry_id}/edit")).into_response();
     }
@@ -318,9 +334,16 @@ async fn update_entry(
                 &schema_file,
                 &entry_id,
             );
-            let _ = uploads::db_update_references(&state.pool, &schema_slug, &entry_id, &hashes).await;
+            let _ =
+                uploads::db_update_references(&state.pool, &schema_slug, &entry_id, &hashes).await;
             let user_id = auth::current_user_id(&session).await.unwrap_or(0);
-            state.audit.log(&user_id.to_string(), "content_update", "content", &format!("{schema_slug}/{entry_id}"), None);
+            state.audit.log(
+                &user_id.to_string(),
+                "content_update",
+                "content",
+                &format!("{schema_slug}/{entry_id}"),
+                None,
+            );
             auth::set_flash(&session, "success", "Entry updated").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
@@ -347,7 +370,13 @@ async fn delete_entry(
     state.cache.remove(&key);
 
     let user_id = auth::current_user_id(&session).await.unwrap_or(0);
-    state.audit.log(&user_id.to_string(), "content_delete", "content", &format!("{schema_slug}/{entry_id}"), None);
+    state.audit.log(
+        &user_id.to_string(),
+        "content_delete",
+        "content",
+        &format!("{schema_slug}/{entry_id}"),
+        None,
+    );
 
     axum::http::StatusCode::NO_CONTENT
 }
@@ -399,7 +428,11 @@ async fn parse_multipart(
     Ok((form_fields, upload_fields))
 }
 
-async fn process_uploads(state: &AppState, data: &mut serde_json::Value, upload_fields: &[UploadField]) {
+async fn process_uploads(
+    state: &AppState,
+    data: &mut serde_json::Value,
+    upload_fields: &[UploadField],
+) {
     for upload in upload_fields {
         match uploads::store_upload(
             &state.config.uploads_dir(),
@@ -407,7 +440,9 @@ async fn process_uploads(state: &AppState, data: &mut serde_json::Value, upload_
             &upload.filename,
             &upload.content_type,
             &upload.data,
-        ).await {
+        )
+        .await
+        {
             Ok(meta) => {
                 let upload_ref = serde_json::json!({
                     "hash": meta.hash,

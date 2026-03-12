@@ -47,7 +47,10 @@ async fn list_schemas(
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("schemas/list.html")
         .map_err(|e| format!("Template error: {e}"))?;
@@ -80,7 +83,10 @@ async fn new_schema_page(
         "required": []
     });
 
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("schemas/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;
@@ -151,7 +157,9 @@ async fn create_schema(
             .into_response();
     }
 
-    state.audit.log(&user_id.to_string(), "schema_create", "schema", &slug, None);
+    state
+        .audit
+        .log(&user_id.to_string(), "schema_create", "schema", &slug, None);
     auth::set_flash(&session, "success", "Schema created").await;
     Redirect::to("/schemas").into_response()
 }
@@ -167,7 +175,10 @@ async fn edit_schema_page(
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
 
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("schemas/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;
@@ -221,7 +232,9 @@ async fn update_schema(
         .into_response();
     }
 
-    state.audit.log(&user_id.to_string(), "schema_update", "schema", &slug, None);
+    state
+        .audit
+        .log(&user_id.to_string(), "schema_update", "schema", &slug, None);
     auth::set_flash(&session, "success", "Schema updated").await;
     Redirect::to("/schemas").into_response()
 }
@@ -233,7 +246,9 @@ async fn delete_schema(
 ) -> impl IntoResponse {
     let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     let _ = schema::delete_schema(&state.config.schemas_dir(), &slug);
-    state.audit.log(&user_id.to_string(), "schema_delete", "schema", &slug, None);
+    state
+        .audit
+        .log(&user_id.to_string(), "schema_delete", "schema", &slug, None);
     axum::http::StatusCode::NO_CONTENT
 }
 
@@ -243,7 +258,10 @@ async fn render_schema_edit(
     schema_json: &str,
     error: &str,
 ) -> axum::response::Result<Html<String>> {
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("schemas/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;

@@ -97,11 +97,7 @@ pub async fn verify_csrf(request: Request, next: Next) -> Response {
         if verify_csrf_token(&session, token).await {
             return next.run(request).await;
         }
-        return (
-            axum::http::StatusCode::FORBIDDEN,
-            "Invalid CSRF token",
-        )
-            .into_response();
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
     }
 
     let content_type = request
@@ -117,7 +113,7 @@ pub async fn verify_csrf(request: Request, next: Next) -> Response {
         let bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
             Ok(b) => b,
             Err(_) => {
-                return (axum::http::StatusCode::BAD_REQUEST, "Body too large").into_response()
+                return (axum::http::StatusCode::BAD_REQUEST, "Body too large").into_response();
             }
         };
 
@@ -127,18 +123,14 @@ pub async fn verify_csrf(request: Request, next: Next) -> Response {
             .split('&')
             .find_map(|pair| pair.strip_prefix("_csrf="));
 
-        if let Some(token) = csrf_value {
-            if verify_csrf_token(&session, token).await {
-                let request = Request::from_parts(parts, axum::body::Body::from(bytes));
-                return next.run(request).await;
-            }
+        if let Some(token) = csrf_value
+            && verify_csrf_token(&session, token).await
+        {
+            let request = Request::from_parts(parts, axum::body::Body::from(bytes));
+            return next.run(request).await;
         }
 
-        return (
-            axum::http::StatusCode::FORBIDDEN,
-            "Invalid CSRF token",
-        )
-            .into_response();
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
     }
 
     // Multipart: handler must verify _csrf from parsed fields

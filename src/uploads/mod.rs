@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -16,10 +16,7 @@ pub struct UploadMeta {
 /// Sanitize a filename: strip path components, replace unsafe chars.
 fn sanitize_filename(filename: &str) -> String {
     // Take only the filename part (strip directory components)
-    let name = filename
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(filename);
+    let name = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
     // Replace anything that isn't alphanumeric, dot, hyphen, or underscore
     let sanitized: String = name
         .chars()
@@ -97,22 +94,20 @@ pub fn get_upload_path(uploads_dir: &Path, hash: &str) -> Option<std::path::Path
 
 /// Insert upload metadata into SQLite. Uses INSERT OR IGNORE for dedup.
 pub async fn db_insert_upload(pool: &SqlitePool, meta: &UploadMeta) -> eyre::Result<()> {
-    sqlx::query(
-        "INSERT OR IGNORE INTO uploads (hash, filename, mime, size) VALUES (?, ?, ?, ?)"
-    )
-    .bind(&meta.hash)
-    .bind(&meta.filename)
-    .bind(&meta.mime)
-    .bind(meta.size as i64)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT OR IGNORE INTO uploads (hash, filename, mime, size) VALUES (?, ?, ?, ?)")
+        .bind(&meta.hash)
+        .bind(&meta.filename)
+        .bind(&meta.mime)
+        .bind(meta.size as i64)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 /// Get upload metadata from SQLite by hash.
 pub async fn db_get_upload_meta(pool: &SqlitePool, hash: &str) -> eyre::Result<Option<UploadMeta>> {
     let row = sqlx::query_as::<_, (String, String, String, i64)>(
-        "SELECT hash, filename, mime, size FROM uploads WHERE hash = ?"
+        "SELECT hash, filename, mime, size FROM uploads WHERE hash = ?",
     )
     .bind(hash)
     .fetch_optional(pool)
@@ -186,11 +181,10 @@ fn collect_upload_hashes(value: &Value, hashes: &mut HashSet<String>) {
             // Check if this object looks like an upload reference
             if let (Some(Value::String(hash)), Some(Value::String(_)), Some(Value::String(_))) =
                 (map.get("hash"), map.get("filename"), map.get("mime"))
+                && is_sha256_hash(hash)
             {
-                if is_sha256_hash(hash) {
-                    hashes.insert(hash.clone());
-                    return;
-                }
+                hashes.insert(hash.clone());
+                return;
             }
             // Otherwise recurse into values
             for v in map.values() {
@@ -254,7 +248,10 @@ pub async fn migrate_meta_sidecars(
         std::fs::remove_file(meta_path)?;
     }
 
-    tracing::info!("Migrated {} upload metadata files to SQLite", meta_files.len());
+    tracing::info!(
+        "Migrated {} upload metadata files to SQLite",
+        meta_files.len()
+    );
     Ok(())
 }
 
@@ -276,14 +273,16 @@ pub async fn populate_references_from_content(
         if schema_path.extension().and_then(|e| e.to_str()) != Some("json") {
             continue;
         }
-        let schema_slug = schema_path.file_stem()
+        let schema_slug = schema_path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or_default()
             .to_string();
 
         let schema_str = std::fs::read_to_string(&schema_path)?;
         let schema_val: Value = serde_json::from_str(&schema_str)?;
-        let storage = schema_val.pointer("/x-substrukt/storage")
+        let storage = schema_val
+            .pointer("/x-substrukt/storage")
             .and_then(|v| v.as_str())
             .unwrap_or("directory");
 
@@ -296,7 +295,8 @@ pub async fn populate_references_from_content(
                     if entry_path.extension().and_then(|e| e.to_str()) != Some("json") {
                         continue;
                     }
-                    let entry_id = entry_path.file_stem()
+                    let entry_id = entry_path
+                        .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or_default()
                         .to_string();
@@ -312,7 +312,8 @@ pub async fn populate_references_from_content(
                 let arr: Value = serde_json::from_str(&std::fs::read_to_string(&single_path)?)?;
                 if let Value::Array(entries) = &arr {
                     for entry in entries {
-                        let entry_id = entry.get("_id")
+                        let entry_id = entry
+                            .get("_id")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default()
                             .to_string();
@@ -344,7 +345,9 @@ mod tests {
         });
         let hashes = extract_upload_hashes(&data);
         assert_eq!(hashes.len(), 1);
-        assert!(hashes.contains("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+        assert!(
+            hashes.contains("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+        );
     }
 
     #[test]
@@ -361,7 +364,9 @@ mod tests {
         });
         let hashes = extract_upload_hashes(&data);
         assert_eq!(hashes.len(), 1);
-        assert!(hashes.contains("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"));
+        assert!(
+            hashes.contains("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+        );
     }
 
     #[test]

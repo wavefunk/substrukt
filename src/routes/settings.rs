@@ -48,7 +48,10 @@ async fn tokens_page(
         })
         .collect();
 
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("settings/tokens.html")
         .map_err(|e| format!("Template error: {e}"))?;
@@ -84,7 +87,13 @@ async fn create_token(
         .await
         .map_err(|e| format!("DB error: {e}"))?;
 
-    state.audit.log(&user_id.to_string(), "token_create", "api_token", &api_token.id.to_string(), None);
+    state.audit.log(
+        &user_id.to_string(),
+        "token_create",
+        "api_token",
+        &api_token.id.to_string(),
+        None,
+    );
 
     let tokens = models::list_api_tokens(&state.pool, user_id)
         .await
@@ -101,7 +110,10 @@ async fn create_token(
         })
         .collect();
 
-    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
+    let tmpl = state
+        .templates
+        .acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("settings/tokens.html")
         .map_err(|e| format!("Template error: {e}"))?;
@@ -126,6 +138,12 @@ async fn delete_token(
     };
 
     let _ = models::delete_api_token(&state.pool, token_id, user_id).await;
-    state.audit.log(&user_id.to_string(), "token_delete", "api_token", &token_id.to_string(), None);
+    state.audit.log(
+        &user_id.to_string(),
+        "token_delete",
+        "api_token",
+        &token_id.to_string(),
+        None,
+    );
     Redirect::to("/settings/tokens")
 }

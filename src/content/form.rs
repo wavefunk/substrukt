@@ -104,7 +104,7 @@ fn render_field(
             // Check for enum
             if let Some(enum_values) = schema.get("enum").and_then(|e| e.as_array()) {
                 let val = value.and_then(|v| v.as_str()).unwrap_or("");
-                let mut options = format!(r#"<option value="">-- Select --</option>"#);
+                let mut options = r#"<option value="">-- Select --</option>"#.to_string();
                 for ev in enum_values {
                     let ev_str = ev.as_str().unwrap_or("");
                     let selected = if ev_str == val { " selected" } else { "" };
@@ -337,14 +337,12 @@ fn parse_array_form_data(schema: &Value, form: &[(String, String)], prefix: &str
     let mut indices: Vec<usize> = Vec::new();
     let prefix_bracket = format!("{prefix}[");
     for (key, _) in form {
-        if let Some(rest) = key.strip_prefix(&prefix_bracket) {
-            if let Some(idx_str) = rest.split(']').next() {
-                if let Ok(idx) = idx_str.parse::<usize>() {
-                    if !indices.contains(&idx) {
-                        indices.push(idx);
-                    }
-                }
-            }
+        if let Some(rest) = key.strip_prefix(&prefix_bracket)
+            && let Some(idx_str) = rest.split(']').next()
+            && let Ok(idx) = idx_str.parse::<usize>()
+            && !indices.contains(&idx)
+        {
+            indices.push(idx);
         }
     }
     indices.sort();

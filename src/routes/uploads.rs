@@ -4,7 +4,7 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Json},
-    routing::{get, post},
+    routing::get,
 };
 use axum_htmx::HxRequest;
 use tower_sessions::Session;
@@ -58,57 +58,99 @@ async fn list_uploads(
 ) -> Result<Html<String>, StatusCode> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
 
-    let rows = match (&filter.q, &filter.schema) {
-        (Some(q), Some(schema_slug)) if !q.is_empty() && !schema_slug.is_empty() => {
-            let pattern = format!("%{q}%");
-            sqlx::query_as::<_, (String, String, String, i64, String, Option<String>, Option<String>)>(
+    let rows =
+        match (&filter.q, &filter.schema) {
+            (Some(q), Some(schema_slug)) if !q.is_empty() && !schema_slug.is_empty() => {
+                let pattern = format!("%{q}%");
+                sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    i64,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(
                 "SELECT u.hash, u.filename, u.mime, u.size, u.created_at, r.schema_slug, r.entry_id
                  FROM uploads u
                  LEFT JOIN upload_references r ON u.hash = r.upload_hash
                  WHERE u.filename LIKE ? AND r.schema_slug = ?
-                 ORDER BY u.created_at DESC"
+                 ORDER BY u.created_at DESC",
             )
             .bind(&pattern)
             .bind(schema_slug)
             .fetch_all(&state.pool)
             .await
-        }
-        (Some(q), _) if !q.is_empty() => {
-            let pattern = format!("%{q}%");
-            sqlx::query_as::<_, (String, String, String, i64, String, Option<String>, Option<String>)>(
+            }
+            (Some(q), _) if !q.is_empty() => {
+                let pattern = format!("%{q}%");
+                sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    i64,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(
                 "SELECT u.hash, u.filename, u.mime, u.size, u.created_at, r.schema_slug, r.entry_id
                  FROM uploads u
                  LEFT JOIN upload_references r ON u.hash = r.upload_hash
                  WHERE u.filename LIKE ?
-                 ORDER BY u.created_at DESC"
+                 ORDER BY u.created_at DESC",
             )
             .bind(&pattern)
             .fetch_all(&state.pool)
             .await
-        }
-        (_, Some(schema_slug)) if !schema_slug.is_empty() => {
-            sqlx::query_as::<_, (String, String, String, i64, String, Option<String>, Option<String>)>(
+            }
+            (_, Some(schema_slug)) if !schema_slug.is_empty() => sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    i64,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(
                 "SELECT u.hash, u.filename, u.mime, u.size, u.created_at, r.schema_slug, r.entry_id
                  FROM uploads u
                  LEFT JOIN upload_references r ON u.hash = r.upload_hash
                  WHERE r.schema_slug = ?
-                 ORDER BY u.created_at DESC"
+                 ORDER BY u.created_at DESC",
             )
             .bind(schema_slug)
             .fetch_all(&state.pool)
-            .await
-        }
-        _ => {
-            sqlx::query_as::<_, (String, String, String, i64, String, Option<String>, Option<String>)>(
+            .await,
+            _ => sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    i64,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(
                 "SELECT u.hash, u.filename, u.mime, u.size, u.created_at, r.schema_slug, r.entry_id
                  FROM uploads u
                  LEFT JOIN upload_references r ON u.hash = r.upload_hash
-                 ORDER BY u.created_at DESC"
+                 ORDER BY u.created_at DESC",
             )
             .fetch_all(&state.pool)
-            .await
+            .await,
         }
-    }.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Group rows by upload hash (JOIN produces multiple rows per upload if multiple refs)
     let mut upload_map: indexmap::IndexMap<String, UploadRow> = indexmap::IndexMap::new();
@@ -122,7 +164,10 @@ async fn list_uploads(
             references: Vec::new(),
         });
         if let (Some(schema_slug), Some(entry_id)) = (ref_schema, ref_entry) {
-            entry.references.push(UploadRef { schema_slug, entry_id });
+            entry.references.push(UploadRef {
+                schema_slug,
+                entry_id,
+            });
         }
     }
     let upload_rows: Vec<UploadRow> = upload_map.into_values().collect();
@@ -131,19 +176,29 @@ async fn list_uploads(
     let schemas: Vec<SchemaOption> = schema::list_schemas(&state.config.schemas_dir())
         .unwrap_or_default()
         .into_iter()
-        .map(|s| SchemaOption { slug: s.meta.slug, title: s.meta.title })
+        .map(|s| SchemaOption {
+            slug: s.meta.slug,
+            title: s.meta.title,
+        })
         .collect();
 
-    let env = state.templates.acquire_env().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let tmpl = env.get_template("uploads/list.html").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let html = tmpl.render(minijinja::context! {
-        base_template => base_for_htmx(is_htmx),
-        csrf_token => csrf_token,
-        uploads => upload_rows,
-        schemas => schemas,
-        filter_q => filter.q.unwrap_or_default(),
-        filter_schema => filter.schema.unwrap_or_default(),
-    }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let env = state
+        .templates
+        .acquire_env()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tmpl = env
+        .get_template("uploads/list.html")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let html = tmpl
+        .render(minijinja::context! {
+            base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
+            uploads => upload_rows,
+            schemas => schemas,
+            filter_q => filter.q.unwrap_or_default(),
+            filter_schema => filter.schema.unwrap_or_default(),
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Html(html))
 }
@@ -180,7 +235,15 @@ async fn upload_file(State(state): State<AppState>, mut multipart: Multipart) ->
             continue;
         }
 
-        match uploads::store_upload(&state.config.uploads_dir(), &state.pool, &filename, &content_type, &data).await {
+        match uploads::store_upload(
+            &state.config.uploads_dir(),
+            &state.pool,
+            &filename,
+            &content_type,
+            &data,
+        )
+        .await
+        {
             Ok(meta) => {
                 return Json(serde_json::json!({
                     "hash": meta.hash,
@@ -231,7 +294,10 @@ async fn serve_file(state: &AppState, hash: &str) -> axum::response::Response {
         None => return StatusCode::NOT_FOUND.into_response(),
     };
 
-    let meta = uploads::db_get_upload_meta(&state.pool, hash).await.ok().flatten();
+    let meta = uploads::db_get_upload_meta(&state.pool, hash)
+        .await
+        .ok()
+        .flatten();
     let content_type = meta
         .as_ref()
         .map(|m| m.mime.clone())
