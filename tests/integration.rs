@@ -1078,6 +1078,26 @@ async fn single_create_and_update_via_web() {
     assert!(body.contains("Updated Site"));
 }
 
+#[tokio::test]
+async fn single_new_entry_page_redirects() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    s.create_schema(SETTINGS_SCHEMA).await;
+
+    // GET /content/site-settings/new should redirect to /_single/edit for singles
+    let resp = s
+        .client
+        .get(s.url("/content/site-settings/new"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        resp.headers().get("location").unwrap(),
+        "/content/site-settings/_single/edit"
+    );
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 /// Extract the first entry ID from a content list page's edit links.

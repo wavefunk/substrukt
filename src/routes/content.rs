@@ -129,11 +129,15 @@ async fn new_entry_page(
     State(state): State<AppState>,
     session: Session,
     Path(schema_slug): Path<String>,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
+
+    if schema_file.meta.kind == Kind::Single {
+        return Ok(Redirect::to(&format!("/content/{schema_slug}/_single/edit")).into_response());
+    }
 
     let form_html = content_form::render_form_fields(&schema_file.schema, None, "");
 
@@ -154,7 +158,7 @@ async fn new_entry_page(
             form_fields => form_html,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok(Html(html).into_response())
 }
 
 async fn edit_entry_page(
@@ -215,6 +219,10 @@ async fn create_entry(
         Ok(Some(s)) => s,
         _ => return Redirect::to("/schemas").into_response(),
     };
+
+    if schema_file.meta.kind == Kind::Single {
+        return Redirect::to(&format!("/content/{schema_slug}/_single/edit")).into_response();
+    }
 
     let (form_fields, upload_fields) = match parse_multipart(multipart).await {
         Ok(r) => r,
