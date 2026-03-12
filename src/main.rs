@@ -1,15 +1,3 @@
-mod auth;
-mod cache;
-mod config;
-mod content;
-mod db;
-mod routes;
-mod schema;
-mod state;
-mod sync;
-mod templates;
-mod uploads;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -20,8 +8,14 @@ use tokio::sync::RwLock;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::SqliteStore;
 
-use crate::config::Config;
-use crate::state::AppStateInner;
+use substrukt::auth;
+use substrukt::cache;
+use substrukt::config::Config;
+use substrukt::db;
+use substrukt::routes;
+use substrukt::state::AppStateInner;
+use substrukt::sync;
+use substrukt::templates;
 
 #[derive(Parser)]
 #[command(name = "substrukt", about = "Schema-driven CMS")]
