@@ -33,6 +33,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/uploads/{hash}", get(get_upload))
         .route("/export", post(export_bundle))
         .route("/import", post(import_bundle))
+        .route("/publish/{environment}", post(publish))
         .layer(middleware::from_fn_with_state(state, api_rate_limit))
 }
 
@@ -610,4 +611,40 @@ async fn import_bundle(
         Json(serde_json::json!({"error": "No file provided"})),
     )
         .into_response()
+}
+
+async fn publish(
+    State(state): State<AppState>,
+    _token: BearerToken,
+    Path(environment): Path<String>,
+) -> impl IntoResponse {
+    if !matches!(environment.as_str(), "staging" | "production") {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Unknown environment"})),
+        )
+            .into_response();
+    }
+
+    match crate::webhooks::fire_webhook(
+        &state.http_client,
+        &state.audit,
+        &state.config,
+        &environment,
+        crate::webhooks::TriggerSource::Manual,
+    )
+    .await
+    {
+        Ok(true) => Json(serde_json::json!({"status": "triggered"})).into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Webhook URL not configured"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
 }
