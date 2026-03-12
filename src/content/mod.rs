@@ -181,7 +181,10 @@ pub fn delete_entry(content_dir: &Path, schema: &SchemaFile, entry_id: &str) -> 
 }
 
 pub fn validate_content(schema: &SchemaFile, data: &Value) -> Result<(), Vec<String>> {
-    match jsonschema::validator_for(&schema.schema) {
+    // Patch schema to accept objects for upload fields, since uploads are stored
+    // as {hash, filename, mime} objects rather than plain strings.
+    let patched = patch_upload_types(&schema.schema);
+    match jsonschema::validator_for(&patched) {
         Ok(validator) => {
             let errors: Vec<String> = validator
                 .iter_errors(data)
@@ -195,6 +198,32 @@ pub fn validate_content(schema: &SchemaFile, data: &Value) -> Result<(), Vec<Str
         }
         Err(e) => Err(vec![format!("Invalid schema: {e}")]),
     }
+}
+
+/// Rewrite `{"type": "string", "format": "upload"}` properties to accept
+/// either a string or an object so that stored upload references pass validation.
+fn patch_upload_types(schema: &Value) -> Value {
+    let mut schema = schema.clone();
+    if let Some(props) = schema
+        .get_mut("properties")
+        .and_then(|p| p.as_object_mut())
+    {
+        for (_key, prop) in props.iter_mut() {
+            let is_upload = prop.get("type").and_then(|t| t.as_str()) == Some("string")
+                && prop.get("format").and_then(|f| f.as_str()) == Some("upload");
+            if is_upload {
+                // Allow string or object
+                if let Some(obj) = prop.as_object_mut() {
+                    obj.remove("type");
+                    obj.insert(
+                        "type".to_string(),
+                        serde_json::json!(["string", "object"]),
+                    );
+                }
+            }
+        }
+    }
+    schema
 }
 
 fn generate_entry_id(schema: &SchemaFile, data: &Value) -> String {
