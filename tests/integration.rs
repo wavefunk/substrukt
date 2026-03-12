@@ -1019,9 +1019,7 @@ async fn single_create_and_update_via_web() {
     s.create_schema(SETTINGS_SCHEMA).await;
 
     // Save (first time — creates the _single entry)
-    let csrf = s
-        .get_csrf("/content/site-settings/_single/edit")
-        .await;
+    let csrf = s.get_csrf("/content/site-settings/_single/edit").await;
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("site_name", "My Site")
@@ -1051,9 +1049,7 @@ async fn single_create_and_update_via_web() {
     assert!(body.contains("My Site"));
 
     // Update
-    let csrf = s
-        .get_csrf("/content/site-settings/_single/edit")
-        .await;
+    let csrf = s.get_csrf("/content/site-settings/_single/edit").await;
     let form = reqwest::multipart::Form::new()
         .text("_csrf", csrf)
         .text("site_name", "Updated Site")

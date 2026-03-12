@@ -33,17 +33,12 @@ impl std::fmt::Display for StorageMode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Kind {
     Single,
+    #[default]
     Collection,
-}
-
-impl Default for Kind {
-    fn default() -> Self {
-        Kind::Collection
-    }
 }
 
 impl std::fmt::Display for Kind {
