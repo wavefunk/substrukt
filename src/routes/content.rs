@@ -4,7 +4,9 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
+use tower_sessions::Session;
 
+use crate::auth;
 use crate::content::{self, form as content_form};
 use crate::schema;
 use crate::state::AppState;
@@ -23,6 +25,7 @@ pub fn routes() -> Router<AppState> {
 
 async fn list_entries(
     State(state): State<AppState>,
+    session: Session,
     Path(schema_slug): Path<String>,
 ) -> axum::response::Result<Html<String>> {
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
@@ -63,6 +66,7 @@ async fn list_entries(
 
     let column_headers: Vec<&str> = columns.iter().map(|(_, label)| label.as_str()).collect();
 
+    let flash = auth::take_flash(&session).await;
     let tmpl = state.templates.read().await;
     let template = tmpl
         .get_template("content/list.html")
@@ -73,6 +77,8 @@ async fn list_entries(
             schema_slug => schema_slug,
             columns => column_headers,
             entries => entry_data,
+            flash_kind => flash.as_ref().map(|(k, _)| k.as_str()),
+            flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
     Ok(Html(html))
@@ -162,6 +168,7 @@ async fn edit_entry_page(
 
 async fn create_entry(
     State(state): State<AppState>,
+    session: Session,
     Path(schema_slug): Path<String>,
     multipart: Multipart,
 ) -> impl IntoResponse {
@@ -203,13 +210,13 @@ async fn create_entry(
 
     match content::save_entry(&state.config.content_dir(), &schema_file, None, data) {
         Ok(id) => {
-            // Update cache
             crate::cache::reload_entry(
                 &state.cache,
                 &state.config.content_dir(),
                 &schema_file,
                 &id,
             );
+            auth::set_flash(&session, "success", "Entry created").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
         Err(e) => {
@@ -221,6 +228,7 @@ async fn create_entry(
 
 async fn update_entry(
     State(state): State<AppState>,
+    session: Session,
     Path((schema_slug, entry_id)): Path<(String, String)>,
     multipart: Multipart,
 ) -> impl IntoResponse {
@@ -273,6 +281,7 @@ async fn update_entry(
                 &schema_file,
                 &entry_id,
             );
+            auth::set_flash(&session, "success", "Entry updated").await;
             Redirect::to(&format!("/content/{schema_slug}")).into_response()
         }
         Err(e) => {
@@ -288,14 +297,14 @@ async fn delete_entry(
 ) -> impl IntoResponse {
     let schema_file = match schema::get_schema(&state.config.schemas_dir(), &schema_slug) {
         Ok(Some(s)) => s,
-        _ => return Redirect::to("/schemas"),
+        _ => return axum::http::StatusCode::NOT_FOUND,
     };
 
     let _ = content::delete_entry(&state.config.content_dir(), &schema_file, &entry_id);
     let key = format!("{schema_slug}/{entry_id}");
     state.cache.remove(&key);
 
-    Redirect::to(&format!("/content/{schema_slug}"))
+    axum::http::StatusCode::NO_CONTENT
 }
 
 struct UploadField {

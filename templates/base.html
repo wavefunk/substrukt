@@ -11,6 +11,14 @@
   <div class="flex min-h-screen">
     {% include "_nav.html" %}
     <main class="flex-1 p-8">
+      {% if flash_kind %}
+      <div class="mb-4 p-4 rounded-md text-sm
+        {% if flash_kind == 'success' %}bg-green-50 text-green-800 border border-green-200
+        {% elif flash_kind == 'error' %}bg-red-50 text-red-800 border border-red-200
+        {% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+        {{ flash_message }}
+      </div>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>

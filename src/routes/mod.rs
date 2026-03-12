@@ -27,7 +27,26 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", axum::routing::get(dashboard))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
+        .fallback(not_found)
         .with_state(state)
+}
+
+async fn not_found(State(state): State<AppState>) -> (axum::http::StatusCode, Html<String>) {
+    let html = render_error(&state, 404, "Page not found").await;
+    (axum::http::StatusCode::NOT_FOUND, Html(html))
+}
+
+pub async fn render_error(state: &AppState, status: u16, message: &str) -> String {
+    let tmpl = state.templates.read().await;
+    if let Ok(template) = tmpl.get_template("error.html") {
+        if let Ok(html) = template.render(minijinja::context! {
+            status => status,
+            message => message,
+        }) {
+            return html;
+        }
+    }
+    format!("<h1>{status}</h1><p>{message}</p>")
 }
 
 async fn dashboard(State(state): State<AppState>) -> axum::response::Result<Html<String>> {

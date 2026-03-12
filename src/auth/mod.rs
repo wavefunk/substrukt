@@ -11,6 +11,7 @@ use crate::db::models;
 use crate::state::AppState;
 
 const USER_ID_KEY: &str = "user_id";
+const FLASH_KEY: &str = "_flash";
 
 pub async fn login_user(session: &Session, user_id: i64) -> eyre::Result<()> {
     session
@@ -30,6 +31,24 @@ pub async fn logout_user(session: &Session) -> eyre::Result<()> {
 
 pub async fn current_user_id(session: &Session) -> Option<i64> {
     session.get::<i64>(USER_ID_KEY).await.ok().flatten()
+}
+
+/// Store a flash message in the session. It will be consumed on next page load.
+pub async fn set_flash(session: &Session, kind: &str, message: &str) {
+    let flash = serde_json::json!({"kind": kind, "message": message});
+    let _ = session.insert(FLASH_KEY, flash).await;
+}
+
+/// Consume and return the flash message from the session, if any.
+pub async fn take_flash(session: &Session) -> Option<(String, String)> {
+    if let Ok(Some(flash)) = session.get::<serde_json::Value>(FLASH_KEY).await {
+        let _ = session.remove::<serde_json::Value>(FLASH_KEY).await;
+        let kind = flash["kind"].as_str().unwrap_or("info").to_string();
+        let message = flash["message"].as_str().unwrap_or("").to_string();
+        Some((kind, message))
+    } else {
+        None
+    }
 }
 
 /// Middleware: redirect to /setup if no users exist, or to /login if not authenticated.
