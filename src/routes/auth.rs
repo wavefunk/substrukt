@@ -1,12 +1,13 @@
 use axum::{
     Form, Router,
     extract::State,
+    http::HeaderMap,
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
 use tower_sessions::Session;
 
-use crate::auth;
+use crate::auth::{self, ensure_csrf_token};
 use crate::db::models;
 use crate::state::AppState;
 
@@ -30,15 +31,29 @@ pub struct SetupForm {
     confirm_password: String,
 }
 
-async fn login_page(State(state): State<AppState>) -> axum::response::Result<Html<String>> {
-    render_template(&state, "login.html", minijinja::context! {}).await
+async fn login_page(
+    State(state): State<AppState>,
+    session: Session,
+) -> axum::response::Result<Html<String>> {
+    let csrf_token = ensure_csrf_token(&session).await;
+    render_template(&state, "login.html", minijinja::context! { csrf_token => csrf_token }).await
 }
 
 async fn login_submit(
     State(state): State<AppState>,
+    headers: HeaderMap,
     session: Session,
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
+    let ip = client_ip(&headers);
+    if !state.login_limiter.check(&ip) {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "Too many login attempts. Please try again later.",
+        )
+            .into_response();
+    }
+
     let user = models::find_user_by_username(&state.pool, &form.username).await;
     match user {
         Ok(Some(user)) if user.verify_password(&form.password) => {
@@ -49,10 +64,14 @@ async fn login_submit(
             Redirect::to("/").into_response()
         }
         _ => {
+            let csrf_token = ensure_csrf_token(&session).await;
             let html = render_template(
                 &state,
                 "login.html",
-                minijinja::context! { error => "Invalid username or password" },
+                minijinja::context! {
+                    csrf_token => csrf_token,
+                    error => "Invalid username or password",
+                },
             )
             .await;
             match html {
@@ -68,7 +87,10 @@ async fn logout(session: Session) -> Redirect {
     Redirect::to("/login")
 }
 
-async fn setup_page(State(state): State<AppState>) -> axum::response::Result<impl IntoResponse> {
+async fn setup_page(
+    State(state): State<AppState>,
+    session: Session,
+) -> axum::response::Result<impl IntoResponse> {
     // If users already exist, redirect to login
     let count = models::user_count(&state.pool)
         .await
@@ -76,7 +98,8 @@ async fn setup_page(State(state): State<AppState>) -> axum::response::Result<imp
     if count > 0 {
         return Ok(Redirect::to("/login").into_response());
     }
-    let html = render_template(&state, "setup.html", minijinja::context! {}).await?;
+    let csrf_token = ensure_csrf_token(&session).await;
+    let html = render_template(&state, "setup.html", minijinja::context! { csrf_token => csrf_token }).await?;
     Ok(html.into_response())
 }
 
@@ -92,10 +115,14 @@ async fn setup_submit(
     }
 
     if form.password != form.confirm_password {
+        let csrf_token = ensure_csrf_token(&session).await;
         let html = render_template(
             &state,
             "setup.html",
-            minijinja::context! { error => "Passwords do not match" },
+            minijinja::context! {
+                csrf_token => csrf_token,
+                error => "Passwords do not match",
+            },
         )
         .await;
         return match html {
@@ -105,10 +132,14 @@ async fn setup_submit(
     }
 
     if form.username.is_empty() || form.password.len() < 8 {
+        let csrf_token = ensure_csrf_token(&session).await;
         let html = render_template(
             &state,
             "setup.html",
-            minijinja::context! { error => "Username required, password must be at least 8 characters" },
+            minijinja::context! {
+                csrf_token => csrf_token,
+                error => "Username required, password must be at least 8 characters",
+            },
         )
         .await;
         return match html {
@@ -134,7 +165,7 @@ async fn render_template(
     name: &str,
     ctx: minijinja::Value,
 ) -> axum::response::Result<Html<String>> {
-    let tmpl = state.templates.read().await;
+    let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template(name)
         .map_err(|e| format!("Template error: {e}"))?;
@@ -142,4 +173,13 @@ async fn render_template(
         .render(ctx)
         .map_err(|e| format!("Render error: {e}"))?;
     Ok(Html(html))
+}
+
+fn client_ip(headers: &HeaderMap) -> String {
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first_ip) = xff.split(',').next() {
+            return first_ip.trim().to_string();
+        }
+    }
+    "unknown".to_string()
 }

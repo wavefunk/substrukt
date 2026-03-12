@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends base_template %}
 {% block title %}{% if is_new %}New Schema{% else %}Edit Schema{% endif %} — Substrukt{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between mb-6">
@@ -12,6 +12,7 @@
 
 <div class="bg-white rounded-lg shadow p-6">
   <form method="post" action="{% if is_new %}/schemas/new{% else %}/schemas/{{ slug }}{% endif %}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div class="mb-4">
       <label for="schema_json" class="block text-sm font-medium text-gray-700 mb-1">JSON Schema</label>
       <textarea id="schema_json" name="schema_json" rows="24"
@@ -35,8 +36,10 @@
 <script>
 function deleteSchema() {
   if (confirm('Delete this schema? This cannot be undone.')) {
-    fetch('/schemas/{{ slug }}', { method: 'DELETE' })
-      .then(() => window.location.href = '/schemas');
+    fetch('/schemas/{{ slug }}', {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': '{{ csrf_token }}' }
+    }).then(() => window.location.href = '/schemas');
   }
 }
 </script>

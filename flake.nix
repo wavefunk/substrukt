@@ -20,6 +20,7 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
+          config.allowUnfree = true;
         };
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       in
@@ -32,6 +33,7 @@
               just
               cargo-expand
               bacon
+              claude-code
             ];
 
             buildInputs = [

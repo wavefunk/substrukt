@@ -25,30 +25,28 @@ All core functionality is working and verified with 17 integration tests:
 - [x] Cache population on startup
 - [x] Export/import tar.gz bundles
 - [x] Graceful shutdown
+- [x] File watcher — `notify` watches content/schema dirs with debounced cache invalidation
+- [x] Template autoreload — `minijinja-autoreload` for hot-reload during development
 
 ## Remaining Work
 
-### P3: Caching and file watching (nice-to-have)
-
-- [ ] **File watcher** — use `notify` to watch `data/content/` and `data/schemas/`
-- [ ] **Wire watcher to cache** — on file change, reload affected entries
+All features complete.
 
 ### P4: Developer experience (nice-to-have)
 
-- [ ] **minijinja-autoreload** — hot-reload templates in dev mode
-- [ ] **htmx partial rendering** — detect `HX-Request` header, return content block only
+- [x] **htmx partial rendering** — detect `HX-Request` header, return content block only
 
 ### P5: Security hardening
 
-- [ ] **CSRF protection** — session-bound token for form submissions
-- [ ] **Input sanitization** — validate schema slugs, sanitize upload filenames
-- [ ] **Secure flag for sessions** — currently disabled for dev; should be configurable
+- [x] **CSRF protection** — session-bound token for form submissions
+- [x] **Input sanitization** — validate schema slugs, sanitize upload filenames
+- [x] **Secure flag for sessions** — configurable via `--secure-cookies` flag
 
 ### P5: More polish
 
-- [ ] **500 error page** — catch panics/errors and show styled error
-- [ ] **Structured logging** — trace spans for request handling, DB queries
-- [ ] **Rate limiting** — for login/API endpoints
+- [x] **500 error page** — CatchPanic layer returns styled error
+- [x] **Structured logging** — tower-http TraceLayer for request/response tracing
+- [x] **Rate limiting** — per-IP sliding window for login (10/min) and API (100/min)
 
 ## File Map
 
@@ -57,14 +55,15 @@ src/
   lib.rs               — Public module exports
   main.rs              — CLI, server startup, shutdown
   config.rs            — Config struct, directory helpers
-  state.rs             — AppState (pool, config, templates, cache)
-  templates.rs         — minijinja Environment setup with nav function
-  cache.rs             — DashMap cache: populate, reload, rebuild
+  state.rs             — AppState (pool, config, templates, cache, rate limiters)
+  templates.rs         — minijinja AutoReloader setup with nav function + htmx helpers
+  cache.rs             — DashMap cache: populate, reload, rebuild + file watcher
+  rate_limit.rs        — Per-IP sliding window rate limiter
   db/
     mod.rs             — SQLite pool init, run migrations
     models.rs          — User, ApiToken structs and queries
   auth/
-    mod.rs             — Session helpers, flash messages, require_auth middleware
+    mod.rs             — Session helpers, flash messages, CSRF, require_auth middleware
     token.rs           — Bearer token generation, hashing, extractor
   schema/
     mod.rs             — Schema file CRUD, validation
@@ -77,7 +76,7 @@ src/
   sync/
     mod.rs             — tar.gz export/import
   routes/
-    mod.rs             — Router assembly, dashboard, 404 fallback
+    mod.rs             — Router assembly, dashboard, 404/500 fallback
     auth.rs            — Login, logout, setup pages
     schemas.rs         — Schema CRUD routes
     content.rs         — Content CRUD routes (multipart)
@@ -87,7 +86,8 @@ src/
 tests/
   integration.rs       — 17 integration tests (auth, CRUD, uploads, API, export/import)
 templates/
-  base.html            — Layout with twind + htmx + nav + flash messages
+  base.html            — Layout with twind + htmx + nav + flash messages + CSRF
+  _partial.html        — Partial layout for htmx responses (content only)
   _nav.html            — Sidebar navigation (dynamic content links)
   error.html           — Error page (404, 500)
   dashboard.html       — Schema/entry counts

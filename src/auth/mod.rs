@@ -2,6 +2,7 @@ pub mod token;
 
 use axum::{
     extract::{Request, State},
+    http::Method,
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
@@ -12,6 +13,7 @@ use crate::state::AppState;
 
 const USER_ID_KEY: &str = "user_id";
 const FLASH_KEY: &str = "_flash";
+const CSRF_KEY: &str = "_csrf";
 
 pub async fn login_user(session: &Session, user_id: i64) -> eyre::Result<()> {
     session
@@ -49,6 +51,102 @@ pub async fn take_flash(session: &Session) -> Option<(String, String)> {
     } else {
         None
     }
+}
+
+/// Get or create a CSRF token for this session.
+pub async fn ensure_csrf_token(session: &Session) -> String {
+    if let Ok(Some(token)) = session.get::<String>(CSRF_KEY).await {
+        return token;
+    }
+    let token = hex::encode(rand::random::<[u8; 32]>());
+    let _ = session.insert(CSRF_KEY, &token).await;
+    token
+}
+
+/// Verify a submitted CSRF token against the session.
+pub async fn verify_csrf_token(session: &Session, submitted: &str) -> bool {
+    if let Ok(Some(expected)) = session.get::<String>(CSRF_KEY).await {
+        expected == submitted
+    } else {
+        false
+    }
+}
+
+/// Middleware: verify CSRF token on mutating requests (POST/PUT/DELETE).
+/// Checks X-CSRF-Token header first, then _csrf form field for urlencoded bodies.
+/// Multipart forms are passed through — handlers must verify _csrf from parsed fields.
+pub async fn verify_csrf(request: Request, next: Next) -> Response {
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) {
+        return next.run(request).await;
+    }
+
+    let session = match request.extensions().get::<Session>().cloned() {
+        Some(s) => s,
+        None => return next.run(request).await,
+    };
+
+    // Check X-CSRF-Token header (used by fetch/DELETE requests)
+    if let Some(token) = request
+        .headers()
+        .get("X-CSRF-Token")
+        .and_then(|v| v.to_str().ok())
+    {
+        if verify_csrf_token(&session, token).await {
+            return next.run(request).await;
+        }
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "Invalid CSRF token",
+        )
+            .into_response();
+    }
+
+    let content_type = request
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    // For urlencoded forms, extract _csrf from body
+    if content_type.starts_with("application/x-www-form-urlencoded") {
+        let (parts, body) = request.into_parts();
+        let bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
+            Ok(b) => b,
+            Err(_) => {
+                return (axum::http::StatusCode::BAD_REQUEST, "Body too large").into_response()
+            }
+        };
+
+        // CSRF tokens are hex — no URL decoding needed
+        let body_str = std::str::from_utf8(&bytes).unwrap_or("");
+        let csrf_value = body_str
+            .split('&')
+            .find_map(|pair| pair.strip_prefix("_csrf="));
+
+        if let Some(token) = csrf_value {
+            if verify_csrf_token(&session, token).await {
+                let request = Request::from_parts(parts, axum::body::Body::from(bytes));
+                return next.run(request).await;
+            }
+        }
+
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "Invalid CSRF token",
+        )
+            .into_response();
+    }
+
+    // Multipart: handler must verify _csrf from parsed fields
+    if content_type.starts_with("multipart/form-data") {
+        return next.run(request).await;
+    }
+
+    next.run(request).await
 }
 
 /// Middleware: redirect to /setup if no users exist, or to /login if not authenticated.

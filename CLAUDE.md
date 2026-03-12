@@ -59,6 +59,10 @@ cargo clippy
 
 `NOTES.md` is a scratchpad for things learned while building this project. Read it at the start of each session and update it as you go. Record architectural decisions, code style conventions, bug-fix insights, and anything that would save a future session from repeating mistakes.
 
+Create a branch for each new feature, and make small atomic commits as each small self contained part of the feature is done. Once the feature is complete, merge the branch back into main, keeping commit history.
+
+Add often used commands to the justfile.
+
 ## Environment
 
 - Nix flake provides the dev shell (`flake.nix`), direnv activates it automatically

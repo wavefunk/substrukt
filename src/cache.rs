@@ -1,4 +1,8 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use notify::{RecursiveMode, Watcher};
 
 use crate::content;
 use crate::schema;
@@ -80,4 +84,58 @@ pub fn reload_entry(
 pub fn rebuild(cache: &ContentCache, schemas_dir: &Path, content_dir: &Path) {
     cache.clear();
     populate(cache, schemas_dir, content_dir);
+}
+
+/// Spawn a file watcher that rebuilds the cache on content/schema changes.
+/// Returns a guard that keeps the watcher alive; drop it to stop watching.
+pub fn spawn_watcher(
+    cache: Arc<ContentCache>,
+    schemas_dir: PathBuf,
+    content_dir: PathBuf,
+) -> Option<impl Drop> {
+    let cache_for_handler = cache.clone();
+    let schemas_for_handler = schemas_dir.clone();
+    let content_for_handler = content_dir.clone();
+
+    // Debounce events with a channel — coalesce rapid changes into one rebuild
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    let mut watcher = match notify::recommended_watcher(move |res: Result<notify::Event, _>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove() {
+                let _ = tx.send(());
+            }
+        }
+    }) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::warn!("Failed to create file watcher: {e}");
+            return None;
+        }
+    };
+
+    if let Err(e) = watcher.watch(&schemas_dir, RecursiveMode::Recursive) {
+        tracing::warn!("Failed to watch schemas dir: {e}");
+    }
+    if let Err(e) = watcher.watch(&content_dir, RecursiveMode::Recursive) {
+        tracing::warn!("Failed to watch content dir: {e}");
+    }
+
+    // Background thread that debounces and rebuilds
+    std::thread::spawn(move || {
+        loop {
+            // Wait for first event
+            if rx.recv().is_err() {
+                break; // Channel closed, watcher dropped
+            }
+            // Drain additional events within 200ms window
+            while rx.recv_timeout(Duration::from_millis(200)).is_ok() {}
+
+            tracing::debug!("File change detected, rebuilding cache");
+            rebuild(&cache_for_handler, &schemas_for_handler, &content_for_handler);
+        }
+    });
+
+    tracing::info!("File watcher started for schemas and content dirs");
+    Some(watcher)
 }

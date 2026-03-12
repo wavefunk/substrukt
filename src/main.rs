@@ -4,7 +4,6 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use dashmap::DashMap;
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::SqliteStore;
 
@@ -12,6 +11,7 @@ use substrukt::auth;
 use substrukt::cache;
 use substrukt::config::Config;
 use substrukt::db;
+use substrukt::rate_limit::RateLimiter;
 use substrukt::routes;
 use substrukt::state::AppStateInner;
 use substrukt::sync;
@@ -34,6 +34,10 @@ struct Cli {
     /// Port to listen on
     #[arg(long, short, global = true)]
     port: Option<u16>,
+
+    /// Enable secure (HTTPS-only) session cookies
+    #[arg(long, global = true)]
+    secure_cookies: bool,
 }
 
 #[derive(Subcommand)]
@@ -68,7 +72,7 @@ async fn main() -> eyre::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let config = Config::new(cli.data_dir, cli.db_path, cli.port);
+    let config = Config::new(cli.data_dir, cli.db_path, cli.port, cli.secure_cookies);
     config.ensure_dirs()?;
 
     match cli.command.unwrap_or(Command::Serve) {
@@ -113,10 +117,10 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     let session_store = SqliteStore::new(pool.clone());
     session_store.migrate().await?;
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false);
+        .with_secure(config.secure_cookies);
 
-    // Template environment
-    let env = templates::create_environment(config.schemas_dir());
+    // Template environment (auto-reloads on file changes)
+    let reloader = templates::create_reloader(config.schemas_dir());
 
     // Content cache
     let content_cache = DashMap::new();
@@ -125,11 +129,22 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     let state = Arc::new(AppStateInner {
         pool,
         config: config.clone(),
-        templates: RwLock::new(env),
+        templates: reloader,
         cache: content_cache,
+        login_limiter: RateLimiter::new(10, std::time::Duration::from_secs(60)),
+        api_limiter: RateLimiter::new(100, std::time::Duration::from_secs(60)),
     });
 
-    let app = routes::build_router(state).layer(session_layer);
+    // File watcher for cache invalidation
+    let _watcher = cache::spawn_watcher(
+        Arc::new(state.cache.clone()),
+        config.schemas_dir(),
+        config.content_dir(),
+    );
+
+    let app = routes::build_router(state)
+        .layer(session_layer)
+        .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let addr = format!("{}:{}", config.listen_addr, config.listen_port);
     let listener = TcpListener::bind(&addr).await?;

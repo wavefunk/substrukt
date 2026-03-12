@@ -36,6 +36,9 @@ pub fn load_schema(path: &Path) -> eyre::Result<SchemaFile> {
 }
 
 pub fn get_schema(schemas_dir: &Path, slug: &str) -> eyre::Result<Option<SchemaFile>> {
+    if !is_valid_slug(slug) {
+        return Ok(None);
+    }
     let path = schemas_dir.join(format!("{slug}.json"));
     if !path.exists() {
         return Ok(None);
@@ -44,6 +47,9 @@ pub fn get_schema(schemas_dir: &Path, slug: &str) -> eyre::Result<Option<SchemaF
 }
 
 pub fn save_schema(schemas_dir: &Path, slug: &str, schema: &serde_json::Value) -> eyre::Result<()> {
+    if !is_valid_slug(slug) {
+        eyre::bail!("Invalid slug: {slug}");
+    }
     let path = schemas_dir.join(format!("{slug}.json"));
     let content = serde_json::to_string_pretty(schema)?;
     std::fs::write(path, content)?;
@@ -51,6 +57,9 @@ pub fn save_schema(schemas_dir: &Path, slug: &str, schema: &serde_json::Value) -
 }
 
 pub fn delete_schema(schemas_dir: &Path, slug: &str) -> eyre::Result<()> {
+    if !is_valid_slug(slug) {
+        return Ok(());
+    }
     let path = schemas_dir.join(format!("{slug}.json"));
     if path.exists() {
         std::fs::remove_file(path)?;
@@ -68,12 +77,32 @@ fn parse_meta(value: &serde_json::Value) -> eyre::Result<SubstruktMeta> {
 
 pub fn validate_schema(schema: &serde_json::Value) -> eyre::Result<()> {
     // Check that x-substrukt is present
-    parse_meta(schema)?;
+    let meta = parse_meta(schema)?;
+
+    // Validate slug: alphanumeric, hyphens, underscores only
+    if !meta.slug.is_empty() && !is_valid_slug(&meta.slug) {
+        eyre::bail!(
+            "Invalid slug '{}': must contain only lowercase letters, numbers, and hyphens",
+            meta.slug
+        );
+    }
 
     // Check that it's a valid JSON Schema by trying to compile it
     jsonschema::validator_for(schema).map_err(|e| eyre::eyre!("Invalid JSON Schema: {e}"))?;
 
     Ok(())
+}
+
+/// Validate that a slug is safe for use in file paths and URLs.
+pub fn is_valid_slug(slug: &str) -> bool {
+    !slug.is_empty()
+        && slug.len() <= 128
+        && slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        && !slug.starts_with('-')
+        && !slug.starts_with('.')
+        && !slug.contains("..")
 }
 
 /// Count properties in a schema

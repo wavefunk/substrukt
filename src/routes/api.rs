@@ -1,7 +1,8 @@
 use axum::{
     Router,
     extract::{Multipart, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
+    middleware,
     response::{IntoResponse, Json},
     routing::{get, post},
 };
@@ -12,7 +13,7 @@ use crate::schema;
 use crate::state::AppState;
 use crate::uploads;
 
-pub fn routes() -> Router<AppState> {
+pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/schemas", get(list_schemas))
         .route("/schemas/{slug}", get(get_schema))
@@ -28,6 +29,31 @@ pub fn routes() -> Router<AppState> {
         .route("/uploads/{hash}", get(get_upload))
         .route("/export", post(export_bundle))
         .route("/import", post(import_bundle))
+        .layer(middleware::from_fn_with_state(state, api_rate_limit))
+}
+
+async fn api_rate_limit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|xff| xff.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if !state.api_limiter.check(&ip) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({"error": "Rate limit exceeded"})),
+        )
+            .into_response();
+    }
+
+    next.run(request).await
 }
 
 async fn list_schemas(State(state): State<AppState>, _token: BearerToken) -> impl IntoResponse {

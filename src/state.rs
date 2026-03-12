@@ -1,19 +1,21 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use minijinja::Environment;
+use minijinja_autoreload::AutoReloader;
 use sqlx::SqlitePool;
-use tokio::sync::RwLock;
 
 use crate::config::Config;
+use crate::rate_limit::RateLimiter;
 
 pub type ContentCache = DashMap<String, serde_json::Value>;
 
 pub struct AppStateInner {
     pub pool: SqlitePool,
     pub config: Config,
-    pub templates: RwLock<Environment<'static>>,
+    pub templates: AutoReloader,
     pub cache: ContentCache,
+    pub login_limiter: RateLimiter,
+    pub api_limiter: RateLimiter,
 }
 
 pub type AppState = Arc<AppStateInner>;

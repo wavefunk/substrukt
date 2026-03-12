@@ -4,12 +4,14 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
+use axum_htmx::HxRequest;
 use tower_sessions::Session;
 
 use crate::auth;
 use crate::content::{self, form as content_form};
 use crate::schema;
 use crate::state::AppState;
+use crate::templates::base_for_htmx;
 use crate::uploads;
 
 pub fn routes() -> Router<AppState> {
@@ -24,10 +26,12 @@ pub fn routes() -> Router<AppState> {
 }
 
 async fn list_entries(
+    HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     Path(schema_slug): Path<String>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -35,7 +39,6 @@ async fn list_entries(
     let entries = content::list_entries(&state.config.content_dir(), &schema_file)
         .map_err(|e| format!("Error: {e}"))?;
 
-    // Get column names from schema properties (first few string/number fields)
     let columns = get_display_columns(&schema_file.schema);
 
     let entry_data: Vec<minijinja::Value> = entries
@@ -67,12 +70,15 @@ async fn list_entries(
     let column_headers: Vec<&str> = columns.iter().map(|(_, label)| label.as_str()).collect();
 
     let flash = auth::take_flash(&session).await;
-    let tmpl = state.templates.read().await;
+    let tmpl = state.templates.acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/list.html")
         .map_err(|e| format!("Template error: {e}"))?;
     let html = template
         .render(minijinja::context! {
+            base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             columns => column_headers,
@@ -112,21 +118,27 @@ fn get_display_columns(schema: &serde_json::Value) -> Vec<(String, String)> {
 }
 
 async fn new_entry_page(
+    HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
     Path(schema_slug): Path<String>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
 
     let form_html = content_form::render_form_fields(&schema_file.schema, None, "");
 
-    let tmpl = state.templates.read().await;
+    let tmpl = state.templates.acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;
     let html = template
         .render(minijinja::context! {
+            base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             is_new => true,
@@ -137,9 +149,12 @@ async fn new_entry_page(
 }
 
 async fn edit_entry_page(
+    HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
     Path((schema_slug, entry_id)): Path<(String, String)>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -150,12 +165,15 @@ async fn edit_entry_page(
 
     let form_html = content_form::render_form_fields(&schema_file.schema, Some(&entry.data), "");
 
-    let tmpl = state.templates.read().await;
+    let tmpl = state.templates.acquire_env()
+        .map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
         .get_template("content/edit.html")
         .map_err(|e| format!("Template error: {e}"))?;
     let html = template
         .render(minijinja::context! {
+            base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             entry_id => entry_id,
@@ -185,6 +203,12 @@ async fn create_entry(
         }
     };
 
+    // Verify CSRF token from multipart form fields
+    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
+    }
+
     let mut data = content_form::form_data_to_json(&schema_file.schema, &form_fields, "");
 
     // Process upload fields
@@ -193,16 +217,17 @@ async fn create_entry(
     // Validate
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let form_html = content_form::render_form_fields(&schema_file.schema, Some(&data), "");
-        let tmpl = state.templates.read().await;
-        if let Ok(template) = tmpl.get_template("content/edit.html") {
-            if let Ok(html) = template.render(minijinja::context! {
-                schema_title => schema_file.meta.title,
-                schema_slug => schema_slug,
-                is_new => true,
-                form_fields => form_html,
-                errors => errors,
-            }) {
-                return Html(html).into_response();
+        if let Ok(tmpl) = state.templates.acquire_env() {
+            if let Ok(template) = tmpl.get_template("content/edit.html") {
+                if let Ok(html) = template.render(minijinja::context! {
+                    schema_title => schema_file.meta.title,
+                    schema_slug => schema_slug,
+                    is_new => true,
+                    form_fields => form_html,
+                    errors => errors,
+                }) {
+                    return Html(html).into_response();
+                }
             }
         }
         return Redirect::to(&format!("/content/{schema_slug}/new")).into_response();
@@ -246,23 +271,30 @@ async fn update_entry(
         }
     };
 
+    // Verify CSRF token from multipart form fields
+    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
+    }
+
     let mut data = content_form::form_data_to_json(&schema_file.schema, &form_fields, "");
 
     process_uploads(&state, &mut data, &upload_fields);
 
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let form_html = content_form::render_form_fields(&schema_file.schema, Some(&data), "");
-        let tmpl = state.templates.read().await;
-        if let Ok(template) = tmpl.get_template("content/edit.html") {
-            if let Ok(html) = template.render(minijinja::context! {
-                schema_title => schema_file.meta.title,
-                schema_slug => schema_slug,
-                entry_id => entry_id,
-                is_new => false,
-                form_fields => form_html,
-                errors => errors,
-            }) {
-                return Html(html).into_response();
+        if let Ok(tmpl) = state.templates.acquire_env() {
+            if let Ok(template) = tmpl.get_template("content/edit.html") {
+                if let Ok(html) = template.render(minijinja::context! {
+                    schema_title => schema_file.meta.title,
+                    schema_slug => schema_slug,
+                    entry_id => entry_id,
+                    is_new => false,
+                    form_fields => form_html,
+                    errors => errors,
+                }) {
+                    return Html(html).into_response();
+                }
             }
         }
         return Redirect::to(&format!("/content/{schema_slug}/{entry_id}/edit")).into_response();

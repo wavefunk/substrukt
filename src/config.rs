@@ -6,10 +6,16 @@ pub struct Config {
     pub db_path: PathBuf,
     pub listen_addr: String,
     pub listen_port: u16,
+    pub secure_cookies: bool,
 }
 
 impl Config {
-    pub fn new(data_dir: Option<PathBuf>, db_path: Option<PathBuf>, port: Option<u16>) -> Self {
+    pub fn new(
+        data_dir: Option<PathBuf>,
+        db_path: Option<PathBuf>,
+        port: Option<u16>,
+        secure_cookies: bool,
+    ) -> Self {
         let data_dir = data_dir.unwrap_or_else(|| PathBuf::from("data"));
         let db_path = db_path.unwrap_or_else(|| data_dir.join("substrukt.db"));
         Self {
@@ -17,6 +23,7 @@ impl Config {
             db_path,
             listen_addr: "0.0.0.0".into(),
             listen_port: port.unwrap_or(3000),
+            secure_cookies,
         }
     }
 
