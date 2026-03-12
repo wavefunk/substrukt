@@ -6,7 +6,7 @@ use axum::{
 };
 use tower_sessions::Session;
 
-use crate::auth;
+use crate::auth::{self, ensure_csrf_token};
 use crate::db::models;
 use crate::state::AppState;
 
@@ -30,8 +30,12 @@ pub struct SetupForm {
     confirm_password: String,
 }
 
-async fn login_page(State(state): State<AppState>) -> axum::response::Result<Html<String>> {
-    render_template(&state, "login.html", minijinja::context! {}).await
+async fn login_page(
+    State(state): State<AppState>,
+    session: Session,
+) -> axum::response::Result<Html<String>> {
+    let csrf_token = ensure_csrf_token(&session).await;
+    render_template(&state, "login.html", minijinja::context! { csrf_token => csrf_token }).await
 }
 
 async fn login_submit(
@@ -49,10 +53,14 @@ async fn login_submit(
             Redirect::to("/").into_response()
         }
         _ => {
+            let csrf_token = ensure_csrf_token(&session).await;
             let html = render_template(
                 &state,
                 "login.html",
-                minijinja::context! { error => "Invalid username or password" },
+                minijinja::context! {
+                    csrf_token => csrf_token,
+                    error => "Invalid username or password",
+                },
             )
             .await;
             match html {
@@ -68,7 +76,10 @@ async fn logout(session: Session) -> Redirect {
     Redirect::to("/login")
 }
 
-async fn setup_page(State(state): State<AppState>) -> axum::response::Result<impl IntoResponse> {
+async fn setup_page(
+    State(state): State<AppState>,
+    session: Session,
+) -> axum::response::Result<impl IntoResponse> {
     // If users already exist, redirect to login
     let count = models::user_count(&state.pool)
         .await
@@ -76,7 +87,8 @@ async fn setup_page(State(state): State<AppState>) -> axum::response::Result<imp
     if count > 0 {
         return Ok(Redirect::to("/login").into_response());
     }
-    let html = render_template(&state, "setup.html", minijinja::context! {}).await?;
+    let csrf_token = ensure_csrf_token(&session).await;
+    let html = render_template(&state, "setup.html", minijinja::context! { csrf_token => csrf_token }).await?;
     Ok(html.into_response())
 }
 
@@ -92,10 +104,14 @@ async fn setup_submit(
     }
 
     if form.password != form.confirm_password {
+        let csrf_token = ensure_csrf_token(&session).await;
         let html = render_template(
             &state,
             "setup.html",
-            minijinja::context! { error => "Passwords do not match" },
+            minijinja::context! {
+                csrf_token => csrf_token,
+                error => "Passwords do not match",
+            },
         )
         .await;
         return match html {
@@ -105,10 +121,14 @@ async fn setup_submit(
     }
 
     if form.username.is_empty() || form.password.len() < 8 {
+        let csrf_token = ensure_csrf_token(&session).await;
         let html = render_template(
             &state,
             "setup.html",
-            minijinja::context! { error => "Username required, password must be at least 8 characters" },
+            minijinja::context! {
+                csrf_token => csrf_token,
+                error => "Username required, password must be at least 8 characters",
+            },
         )
         .await;
         return match html {

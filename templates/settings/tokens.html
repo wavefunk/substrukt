@@ -13,6 +13,7 @@
 <div class="bg-white rounded-lg shadow p-6 mb-6">
   <h2 class="text-lg font-medium mb-4">Create New Token</h2>
   <form method="post" action="/settings/tokens" class="flex gap-3">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <input type="text" name="name" placeholder="Token name" required
       class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
     <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">
@@ -38,6 +39,7 @@
         <td class="px-4 py-3 text-gray-500 text-sm">{{ token.created_at }}</td>
         <td class="px-4 py-3 text-right">
           <form method="post" action="/settings/tokens/{{ token.id }}/delete" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
             <button type="submit" class="text-red-500 hover:text-red-700 text-sm"
               onclick="return confirm('Delete this token?')">Delete</button>
           </form>

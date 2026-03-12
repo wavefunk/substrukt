@@ -31,6 +31,7 @@ async fn list_entries(
     session: Session,
     Path(schema_slug): Path<String>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -38,7 +39,6 @@ async fn list_entries(
     let entries = content::list_entries(&state.config.content_dir(), &schema_file)
         .map_err(|e| format!("Error: {e}"))?;
 
-    // Get column names from schema properties (first few string/number fields)
     let columns = get_display_columns(&schema_file.schema);
 
     let entry_data: Vec<minijinja::Value> = entries
@@ -78,6 +78,7 @@ async fn list_entries(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             columns => column_headers,
@@ -119,8 +120,10 @@ fn get_display_columns(schema: &serde_json::Value) -> Vec<(String, String)> {
 async fn new_entry_page(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
     Path(schema_slug): Path<String>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -135,6 +138,7 @@ async fn new_entry_page(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             is_new => true,
@@ -147,8 +151,10 @@ async fn new_entry_page(
 async fn edit_entry_page(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
     Path((schema_slug, entry_id)): Path<(String, String)>,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema_file = schema::get_schema(&state.config.schemas_dir(), &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -167,6 +173,7 @@ async fn edit_entry_page(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             entry_id => entry_id,
@@ -195,6 +202,12 @@ async fn create_entry(
             return Redirect::to(&format!("/content/{schema_slug}/new")).into_response();
         }
     };
+
+    // Verify CSRF token from multipart form fields
+    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
+    }
 
     let mut data = content_form::form_data_to_json(&schema_file.schema, &form_fields, "");
 
@@ -257,6 +270,12 @@ async fn update_entry(
                 .into_response();
         }
     };
+
+    // Verify CSRF token from multipart form fields
+    let csrf_value = form_fields.iter().find(|(k, _)| k == "_csrf").map(|(_, v)| v.as_str());
+    if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
+        return (axum::http::StatusCode::FORBIDDEN, "Invalid CSRF token").into_response();
+    }
 
     let mut data = content_form::form_data_to_json(&schema_file.schema, &form_fields, "");
 

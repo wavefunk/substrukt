@@ -45,6 +45,7 @@ async fn list_schemas(
         })
         .collect();
 
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
     let tmpl = state.templates.acquire_env().map_err(|e| format!("Template env error: {e}"))?;
     let template = tmpl
@@ -53,6 +54,7 @@ async fn list_schemas(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schemas => schema_data,
             flash_kind => flash.as_ref().map(|(k, _)| k.as_str()),
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
@@ -64,7 +66,9 @@ async fn list_schemas(
 async fn new_schema_page(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let default_schema = serde_json::json!({
         "x-substrukt": {
             "title": "",
@@ -83,6 +87,7 @@ async fn new_schema_page(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             is_new => true,
             schema_json => serde_json::to_string_pretty(&default_schema).unwrap_or_default(),
         })
@@ -152,8 +157,10 @@ async fn create_schema(
 async fn edit_schema_page(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
     Path(slug): Path<String>,
 ) -> axum::response::Result<impl IntoResponse> {
+    let csrf_token = auth::ensure_csrf_token(&session).await;
     let schema = schema::get_schema(&state.config.schemas_dir(), &slug)
         .map_err(|e| format!("Error: {e}"))?
         .ok_or("Schema not found")?;
@@ -165,6 +172,7 @@ async fn edit_schema_page(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             is_new => false,
             slug => slug,
             schema_json => serde_json::to_string_pretty(&schema.schema).unwrap_or_default(),

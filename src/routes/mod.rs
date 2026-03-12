@@ -7,8 +7,9 @@ pub mod uploads;
 
 use axum::{Router, extract::State, middleware, response::Html};
 use axum_htmx::HxRequest;
+use tower_sessions::Session;
 
-use crate::auth::require_auth;
+use crate::auth::{require_auth, verify_csrf};
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
 
@@ -27,6 +28,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/uploads", upload_routes)
         .nest("/settings", settings_routes)
         .route("/", axum::routing::get(dashboard))
+        .layer(middleware::from_fn(verify_csrf))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
         .fallback(not_found)
@@ -60,7 +62,9 @@ pub fn render_error(state: &AppState, status: u16, message: &str, is_htmx: bool)
 async fn dashboard(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
+    session: Session,
 ) -> axum::response::Result<Html<String>> {
+    let csrf_token = crate::auth::ensure_csrf_token(&session).await;
     let schemas = crate::schema::list_schemas(&state.config.schemas_dir()).unwrap_or_default();
     let entry_count: usize = schemas
         .iter()
@@ -76,6 +80,7 @@ async fn dashboard(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             schema_count => schemas.len(),
             entry_count => entry_count,
         })

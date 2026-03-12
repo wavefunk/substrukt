@@ -13,6 +13,7 @@
     <div class="bg-red-50 text-red-700 p-3 rounded mb-4 text-sm">{{ error }}</div>
     {% endif %}
     <form method="post" action="/login">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <div class="mb-4">
         <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
         <input type="text" id="username" name="username" required autofocus

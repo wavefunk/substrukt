@@ -20,6 +20,7 @@
 <div class="bg-white rounded-lg shadow p-6">
   <form method="post" enctype="multipart/form-data"
     action="{% if is_new %}/content/{{ schema_slug }}/new{% else %}/content/{{ schema_slug }}/{{ entry_id }}{% endif %}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     {{ form_fields|safe }}
     <div class="flex gap-3 mt-6 pt-4 border-t border-gray-100">
       <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">

@@ -35,6 +35,8 @@ async fn tokens_page(
         .await
         .map_err(|e| format!("DB error: {e}"))?;
 
+    let csrf_token = auth::ensure_csrf_token(&session).await;
+
     let token_data: Vec<minijinja::Value> = tokens
         .iter()
         .map(|t| {
@@ -53,6 +55,7 @@ async fn tokens_page(
     let html = template
         .render(minijinja::context! {
             base_template => base_for_htmx(is_htmx),
+            csrf_token => csrf_token,
             tokens => token_data,
         })
         .map_err(|e| format!("Render error: {e}"))?;

@@ -78,13 +78,21 @@ impl TestServer {
         format!("{}{path}", self.base_url)
     }
 
+    async fn get_csrf(&self, path: &str) -> String {
+        let resp = self.client.get(self.url(path)).send().await.unwrap();
+        let body = resp.text().await.unwrap();
+        extract_csrf_token(&body).expect(&format!("CSRF token not found on {path}"))
+    }
+
     async fn setup_admin(&self) {
+        let csrf = self.get_csrf("/setup").await;
         self.client
             .post(self.url("/setup"))
             .form(&[
                 ("username", "admin"),
                 ("password", "testpassword"),
                 ("confirm_password", "testpassword"),
+                ("_csrf", &csrf),
             ])
             .send()
             .await
@@ -92,9 +100,10 @@ impl TestServer {
     }
 
     async fn create_schema(&self, json: &str) {
+        let csrf = self.get_csrf("/schemas/new").await;
         self.client
             .post(self.url("/schemas/new"))
-            .form(&[("schema_json", json)])
+            .form(&[("schema_json", json), ("_csrf", &csrf)])
             .send()
             .await
             .unwrap();
@@ -102,15 +111,14 @@ impl TestServer {
 
     /// Create an API token via the settings UI and extract the raw token from the response.
     async fn create_api_token(&self, name: &str) -> String {
+        let csrf = self.get_csrf("/settings/tokens").await;
         let resp = self.client
             .post(self.url("/settings/tokens"))
-            .form(&[("name", name)])
+            .form(&[("name", name), ("_csrf", &csrf)])
             .send()
             .await
             .unwrap();
         let body = resp.text().await.unwrap();
-        // The token is shown in the response page — extract it.
-        // It's a 64-char hex string shown after "new_token" context.
         extract_new_token(&body).expect("should find new token in response")
     }
 }
@@ -135,11 +143,13 @@ async fn auth_redirects_to_setup_when_no_users() {
 #[tokio::test]
 async fn auth_setup_creates_admin_and_sets_session() {
     let s = TestServer::start().await;
+    let csrf = s.get_csrf("/setup").await;
     let resp = s.client.post(s.url("/setup"))
         .form(&[
             ("username", "admin"),
             ("password", "testpassword"),
             ("confirm_password", "testpassword"),
+            ("_csrf", &csrf),
         ])
         .send()
         .await
@@ -167,8 +177,13 @@ async fn auth_login_and_logout() {
     let s = TestServer::start().await;
     s.setup_admin().await;
 
-    // Logout
-    let resp = s.client.post(s.url("/logout")).send().await.unwrap();
+    // Logout (get CSRF from dashboard which has nav with logout form)
+    let csrf = s.get_csrf("/").await;
+    let resp = s.client.post(s.url("/logout"))
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
 
     // Should redirect to login now
@@ -177,8 +192,9 @@ async fn auth_login_and_logout() {
     assert_eq!(resp.headers().get("location").unwrap(), "/login");
 
     // Login again
+    let csrf = s.get_csrf("/login").await;
     let resp = s.client.post(s.url("/login"))
-        .form(&[("username", "admin"), ("password", "testpassword")])
+        .form(&[("username", "admin"), ("password", "testpassword"), ("_csrf", csrf.as_str())])
         .send()
         .await
         .unwrap();
@@ -204,8 +220,9 @@ async fn schema_create_and_list() {
     let s = TestServer::start().await;
     s.setup_admin().await;
 
+    let csrf = s.get_csrf("/schemas/new").await;
     let resp = s.client.post(s.url("/schemas/new"))
-        .form(&[("schema_json", BLOG_SCHEMA)])
+        .form(&[("schema_json", BLOG_SCHEMA), ("_csrf", &csrf)])
         .send()
         .await
         .unwrap();
@@ -227,9 +244,10 @@ async fn schema_edit_and_update() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Update via POST
+    let csrf = s.get_csrf("/schemas/blog-posts/edit").await;
     let updated = BLOG_SCHEMA.replace("Blog Posts", "Articles");
     let resp = s.client.post(s.url("/schemas/blog-posts"))
-        .form(&[("schema_json", updated.as_str())])
+        .form(&[("schema_json", updated.as_str()), ("_csrf", &csrf)])
         .send()
         .await
         .unwrap();
@@ -242,7 +260,12 @@ async fn schema_delete() {
     s.setup_admin().await;
     s.create_schema(BLOG_SCHEMA).await;
 
-    let resp = s.client.delete(s.url("/schemas/blog-posts")).send().await.unwrap();
+    let csrf = s.get_csrf("/schemas/blog-posts/edit").await;
+    let resp = s.client.delete(s.url("/schemas/blog-posts"))
+        .header("X-CSRF-Token", &csrf)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 }
 
@@ -262,7 +285,9 @@ async fn content_create_and_list() {
     assert!(body.contains("<textarea"), "Form should have textarea");
 
     // Create entry
+    let csrf = s.get_csrf("/content/blog-posts/new").await;
     let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
         .text("title", "Hello World")
         .text("body", "First post")
         .text("published", "true");
@@ -286,7 +311,9 @@ async fn content_edit_and_delete() {
     s.create_schema(BLOG_SCHEMA).await;
 
     // Create
+    let csrf = s.get_csrf("/content/blog-posts/new").await;
     let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
         .text("title", "To Edit")
         .text("body", "Original");
     s.client.post(s.url("/content/blog-posts/new"))
@@ -308,7 +335,9 @@ async fn content_edit_and_delete() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Update
+    let csrf = s.get_csrf(&format!("/content/blog-posts/{entry_id}/edit")).await;
     let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
         .text("title", "Edited Title")
         .text("body", "Updated body");
     let resp = s.client.post(s.url(&format!("/content/blog-posts/{entry_id}")))
@@ -324,7 +353,9 @@ async fn content_edit_and_delete() {
     assert!(body.contains("Edited Title"));
 
     // Delete
+    let csrf = s.get_csrf("/content/blog-posts").await;
     let resp = s.client.delete(s.url(&format!("/content/blog-posts/{entry_id}")))
+        .header("X-CSRF-Token", &csrf)
         .send()
         .await
         .unwrap();
@@ -349,11 +380,13 @@ async fn upload_create_and_serve() {
     s.setup_admin().await;
     s.create_schema(GALLERY_SCHEMA).await;
 
+    let csrf = s.get_csrf("/content/gallery/new").await;
     let file_part = reqwest::multipart::Part::bytes(b"fake image data".to_vec())
         .file_name("photo.png")
         .mime_str("image/png")
         .unwrap();
     let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
         .text("title", "My Photo")
         .part("image", file_part);
     let resp = s.client.post(s.url("/content/gallery/new"))
@@ -395,11 +428,13 @@ async fn upload_dedup() {
 
     // Upload same file twice in different entries
     for title in ["Photo 1", "Photo 2"] {
+        let csrf = s.get_csrf("/content/gallery/new").await;
         let file_part = reqwest::multipart::Part::bytes(b"identical content".to_vec())
             .file_name("img.png")
             .mime_str("image/png")
             .unwrap();
         let form = reqwest::multipart::Form::new()
+            .text("_csrf", csrf)
             .text("title", title.to_string())
             .part("image", file_part);
         s.client.post(s.url("/content/gallery/new"))
@@ -582,7 +617,9 @@ async fn api_export_import() {
 
     // Create schema and content
     s.create_schema(BLOG_SCHEMA).await;
+    let csrf = s.get_csrf("/content/blog-posts/new").await;
     let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
         .text("title", "Export Me")
         .text("body", "Content for export");
     s.client.post(s.url("/content/blog-posts/new"))
@@ -674,6 +711,27 @@ fn extract_new_token(html: &str) -> Option<String> {
             if token.len() == 64 && token.chars().all(|c| c.is_ascii_hexdigit()) {
                 return Some(token.to_string());
             }
+        }
+    }
+    None
+}
+
+/// Extract the CSRF token from an HTML page's hidden input or meta tag.
+fn extract_csrf_token(html: &str) -> Option<String> {
+    // Try hidden input: <input type="hidden" name="_csrf" value="TOKEN">
+    let marker = "name=\"_csrf\" value=\"";
+    if let Some(pos) = html.find(marker) {
+        let rest = &html[pos + marker.len()..];
+        if let Some(end) = rest.find('"') {
+            return Some(rest[..end].to_string());
+        }
+    }
+    // Try meta tag: <meta name="csrf-token" content="TOKEN">
+    let marker = "name=\"csrf-token\" content=\"";
+    if let Some(pos) = html.find(marker) {
+        let rest = &html[pos + marker.len()..];
+        if let Some(end) = rest.find('"') {
+            return Some(rest[..end].to_string());
         }
     }
     None
