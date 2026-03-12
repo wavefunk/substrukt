@@ -25,17 +25,13 @@ All core functionality is working and verified with 17 integration tests:
 - [x] Cache population on startup
 - [x] Export/import tar.gz bundles
 - [x] Graceful shutdown
+- [x] File watcher — `notify` watches content/schema dirs with debounced cache invalidation
+- [x] Template autoreload — `minijinja-autoreload` for hot-reload during development
 
 ## Remaining Work
 
-### P3: Caching and file watching (nice-to-have)
-
-- [ ] **File watcher** — use `notify` to watch `data/content/` and `data/schemas/`
-- [ ] **Wire watcher to cache** — on file change, reload affected entries
-
 ### P4: Developer experience (nice-to-have)
 
-- [ ] **minijinja-autoreload** — hot-reload templates in dev mode
 - [ ] **htmx partial rendering** — detect `HX-Request` header, return content block only
 
 ### P5: Security hardening
@@ -58,8 +54,8 @@ src/
   main.rs              — CLI, server startup, shutdown
   config.rs            — Config struct, directory helpers
   state.rs             — AppState (pool, config, templates, cache)
-  templates.rs         — minijinja Environment setup with nav function
-  cache.rs             — DashMap cache: populate, reload, rebuild
+  templates.rs         — minijinja AutoReloader setup with nav function
+  cache.rs             — DashMap cache: populate, reload, rebuild + file watcher
   db/
     mod.rs             — SQLite pool init, run migrations
     models.rs          — User, ApiToken structs and queries
