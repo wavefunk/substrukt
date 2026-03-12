@@ -10,6 +10,38 @@ pub struct UploadMeta {
     pub size: u64,
 }
 
+/// Sanitize a filename: strip path components, replace unsafe chars.
+fn sanitize_filename(filename: &str) -> String {
+    // Take only the filename part (strip directory components)
+    let name = filename
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(filename);
+    // Replace anything that isn't alphanumeric, dot, hyphen, or underscore
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Prevent hidden files and empty names
+    let sanitized = sanitized.trim_start_matches('.');
+    if sanitized.is_empty() {
+        "upload".to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+/// Validate that a hash string is valid hex (prevents path traversal).
+fn is_valid_hash(hash: &str) -> bool {
+    hash.len() >= 3 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 pub fn store_upload(
     uploads_dir: &Path,
     filename: &str,
@@ -19,6 +51,7 @@ pub fn store_upload(
     let mut hasher = Sha256::new();
     hasher.update(data);
     let hash = hex::encode(hasher.finalize());
+    let safe_filename = sanitize_filename(filename);
 
     let prefix = &hash[..2];
     let rest = &hash[2..];
@@ -33,7 +66,7 @@ pub fn store_upload(
     // Write sidecar metadata
     let meta = UploadMeta {
         hash: hash.clone(),
-        filename: filename.to_string(),
+        filename: safe_filename,
         mime: mime.to_string(),
         size: data.len() as u64,
     };
@@ -47,7 +80,7 @@ pub fn store_upload(
 }
 
 pub fn get_upload_path(uploads_dir: &Path, hash: &str) -> Option<std::path::PathBuf> {
-    if hash.len() < 3 {
+    if !is_valid_hash(hash) {
         return None;
     }
     let prefix = &hash[..2];
@@ -57,7 +90,7 @@ pub fn get_upload_path(uploads_dir: &Path, hash: &str) -> Option<std::path::Path
 }
 
 pub fn get_upload_meta(uploads_dir: &Path, hash: &str) -> Option<UploadMeta> {
-    if hash.len() < 3 {
+    if !is_valid_hash(hash) {
         return None;
     }
     let prefix = &hash[..2];
