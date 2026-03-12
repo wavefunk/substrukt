@@ -11,6 +11,7 @@ use substrukt::auth;
 use substrukt::cache;
 use substrukt::config::Config;
 use substrukt::db;
+use substrukt::metrics;
 use substrukt::rate_limit::RateLimiter;
 use substrukt::routes;
 use substrukt::state::AppStateInner;
@@ -126,6 +127,9 @@ async fn run_server(config: Config) -> eyre::Result<()> {
     let content_cache = DashMap::new();
     cache::populate(&content_cache, &config.schemas_dir(), &config.content_dir());
 
+    // Prometheus metrics
+    let metrics_handle = metrics::setup_recorder();
+
     let state = Arc::new(AppStateInner {
         pool,
         config: config.clone(),
@@ -133,6 +137,7 @@ async fn run_server(config: Config) -> eyre::Result<()> {
         cache: content_cache,
         login_limiter: RateLimiter::new(10, std::time::Duration::from_secs(60)),
         api_limiter: RateLimiter::new(100, std::time::Duration::from_secs(60)),
+        metrics_handle,
     });
 
     // File watcher for cache invalidation

@@ -11,6 +11,7 @@ use tower_http::catch_panic::CatchPanicLayer;
 use tower_sessions::Session;
 
 use crate::auth::{require_auth, verify_csrf};
+use crate::metrics;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
 
@@ -32,7 +33,9 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn(verify_csrf))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
+        .route("/metrics", axum::routing::get(metrics::metrics_handler))
         .fallback(not_found)
+        .layer(middleware::from_fn(metrics::track_metrics))
         .layer(CatchPanicLayer::custom(handle_panic))
         .with_state(state)
 }

@@ -42,6 +42,10 @@ impl TestServer {
         let content_cache = DashMap::new();
         cache::populate(&content_cache, &config.schemas_dir(), &config.content_dir());
 
+        let metrics_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+            .build_recorder()
+            .handle();
+
         let state = Arc::new(AppStateInner {
             pool,
             config,
@@ -49,6 +53,7 @@ impl TestServer {
             cache: content_cache,
             login_limiter: RateLimiter::new(100, std::time::Duration::from_secs(60)),
             api_limiter: RateLimiter::new(1000, std::time::Duration::from_secs(60)),
+            metrics_handle,
         });
 
         let app = routes::build_router(state).layer(session_layer);

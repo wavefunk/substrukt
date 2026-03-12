@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use metrics_exporter_prometheus::PrometheusHandle;
 use minijinja_autoreload::AutoReloader;
 use sqlx::SqlitePool;
 
@@ -16,6 +17,7 @@ pub struct AppStateInner {
     pub cache: ContentCache,
     pub login_limiter: RateLimiter,
     pub api_limiter: RateLimiter,
+    pub metrics_handle: PrometheusHandle,
 }
 
 pub type AppState = Arc<AppStateInner>;

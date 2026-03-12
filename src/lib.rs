@@ -3,6 +3,7 @@ pub mod cache;
 pub mod config;
 pub mod content;
 pub mod db;
+pub mod metrics;
 pub mod rate_limit;
 pub mod routes;
 pub mod schema;
