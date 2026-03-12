@@ -80,7 +80,8 @@ async fn main() -> eyre::Result<()> {
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => run_server(config).await,
         Command::Import { path } => {
-            let warnings = sync::import_bundle(&config.data_dir, &path)?;
+            let pool = db::init_pool(&config.db_path).await?;
+            let warnings = sync::import_bundle(&config.data_dir, &pool, &path).await?;
             if warnings.is_empty() {
                 tracing::info!("Import complete, no validation warnings");
             } else {
@@ -92,7 +93,8 @@ async fn main() -> eyre::Result<()> {
             Ok(())
         }
         Command::Export { path } => {
-            sync::export_bundle(&config.data_dir, &path)?;
+            let pool = db::init_pool(&config.db_path).await?;
+            sync::export_bundle(&config.data_dir, &pool, &path).await?;
             tracing::info!("Exported to {}", path.display());
             Ok(())
         }

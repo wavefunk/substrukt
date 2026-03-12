@@ -358,7 +358,7 @@ async fn get_upload(
 async fn export_bundle(State(state): State<AppState>, _token: BearerToken) -> impl IntoResponse {
     let tmp =
         std::env::temp_dir().join(format!("substrukt-export-{}.tar.gz", uuid::Uuid::new_v4()));
-    match crate::sync::export_bundle(&state.config.data_dir, &tmp) {
+    match crate::sync::export_bundle(&state.config.data_dir, &state.pool, &tmp).await {
         Ok(()) => match std::fs::read(&tmp) {
             Ok(data) => {
                 let _ = std::fs::remove_file(&tmp);
@@ -412,7 +412,7 @@ async fn import_bundle(
             continue;
         }
 
-        match crate::sync::import_bundle_from_bytes(&state.config.data_dir, &data) {
+        match crate::sync::import_bundle_from_bytes(&state.config.data_dir, &state.pool, &data).await {
             Ok(warnings) => {
                 // Rebuild cache after import
                 crate::cache::rebuild(
