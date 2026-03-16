@@ -1,0 +1,23 @@
+# Minimal runtime image using a pre-built binary (used by release CI).
+# Templates are embedded in the binary at compile time for release builds.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash substrukt
+
+COPY substrukt /usr/local/bin/substrukt
+RUN chmod +x /usr/local/bin/substrukt
+
+WORKDIR /opt/substrukt
+
+RUN mkdir -p /data/schemas /data/content /data/uploads && chown -R substrukt:substrukt /data
+
+USER substrukt
+
+EXPOSE 3000
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["substrukt"]
+CMD ["serve", "--data-dir", "/data", "--db-path", "/data/substrukt.db", "--port", "3000"]

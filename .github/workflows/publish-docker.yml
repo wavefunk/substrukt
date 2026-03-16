@@ -1,23 +1,40 @@
-name: Publish to GHCR
+name: Publish Docker
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  publish-docker:
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Fetch build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: artifacts-*
+          path: dist-artifacts/
+          merge-multiple: true
+
+      - name: Extract linux binary
+        shell: bash
+        run: |
+          mkdir -p docker-build
+          tar -xf dist-artifacts/substrukt-x86_64-unknown-linux-gnu.tar.xz \
+            --strip-components=1 -C docker-build
 
       - name: Authenticate with GitHub Container Registry
         uses: docker/login-action@v3
@@ -31,11 +48,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
 
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: docker-build
+          file: Dockerfile.ci
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
