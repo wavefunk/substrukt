@@ -1,0 +1,300 @@
+# Substrukt — Agent Instructions
+
+Substrukt is a schema-driven CMS built in Rust. Content types are defined as JSON
+Schemas. Each schema produces a set of JSON entries stored on disk. All content is
+readable and writable via a REST API authenticated with a bearer token.
+
+This file tells you everything you need to operate Substrukt on behalf of a user.
+Read it fully before making any API calls.
+
+---
+
+## Authentication
+
+Every API request must include this header:
+
+```
+Authorization: Bearer <token>
+```
+
+The token is provided by the user. There are three roles:
+
+- `viewer` — read-only access to content and schemas
+- `editor` — can create, update, and delete content entries
+- `admin`  — editor permissions plus export and import
+
+If a request returns 403, the token does not have sufficient role for that operation.
+
+---
+
+## Base URL
+
+All API endpoints are relative to the deployment address the user provides.
+Example: if the user says their site is at `https://mycms.example.com`, then the
+schemas endpoint is `https://mycms.example.com/api/v1/schemas`.
+
+---
+
+## Data model
+
+A **schema** defines a content type. Each schema has:
+- a `slug` (URL-safe identifier, e.g. `blog-posts`)
+- a `title` (human-readable name, e.g. `Blog Posts`)
+- a `kind`: either `collection` (many entries) or `single` (exactly one entry)
+- a `storage` mode: either `directory` (one file per entry) or `single-file`
+- a `schema` object: standard JSON Schema describing the fields
+
+A **content entry** is a JSON object that conforms to a schema's fields.
+Entries in a `collection` schema each have a unique `id` (auto-generated from the
+first string field, slugified). Entries in a `single` schema have no id.
+
+No fields are enforced as required by default. The `required` array in a schema is
+empty unless a user has explicitly edited it. Do not add fields to `required` when
+creating or editing schemas.
+
+---
+
+## Endpoints
+
+### Schemas
+
+#### List all schemas
+```
+GET /api/v1/schemas
+```
+Returns an array. Each item has: `title`, `slug`, `storage`, `kind`, `schema`.
+Call this first to discover what content types exist on this instance.
+
+Response example:
+```json
+[
+  {
+    "title": "Blog Posts",
+    "slug": "blog-posts",
+    "storage": "directory",
+    "kind": "collection",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body":  { "type": "string", "format": "textarea" },
+        "published_at": { "type": "string" }
+      },
+      "required": []
+    }
+  }
+]
+```
+
+#### Get a single schema
+```
+GET /api/v1/schemas/:slug
+```
+Returns the raw JSON Schema object for that slug.
+
+---
+
+### Content — collection kind
+
+Use these endpoints for schemas where `kind` is `collection`.
+
+#### List entries
+```
+GET /api/v1/content/:schema_slug
+```
+Query parameters:
+- `status` — filter by status. Values: `published` (default), `draft`, `all`.
+  Pass `?status=all` to retrieve every entry including drafts.
+- `q` — keyword filter. Searches across all string field values.
+
+Returns a JSON array of entry objects. Each entry contains the fields defined in
+the schema. There is no `id` field in the response body; the id is only returned
+on creation (see below).
+
+#### Get a single entry
+```
+GET /api/v1/content/:schema_slug/:entry_id
+```
+Returns a single entry object, or 404 if not found.
+
+#### Create an entry
+```
+POST /api/v1/content/:schema_slug
+Content-Type: application/json
+```
+Body: a JSON object with the fields you want to set. Only `editor` role or above
+can call this.
+
+On success returns `201` with body `{"id": "<generated-id>"}`.
+The id is derived from the first string field value, slugified. For example, a
+post with `"title": "Hello World"` gets id `hello-world`.
+
+Example body:
+```json
+{
+  "title": "Hello World",
+  "body": "This is my first post.",
+  "published_at": "2024-01-15"
+}
+```
+
+#### Update an entry
+```
+PUT /api/v1/content/:schema_slug/:entry_id
+Content-Type: application/json
+```
+Body: a complete JSON object with all fields (full replacement, not a patch).
+Returns `200` on success.
+
+#### Delete an entry
+```
+DELETE /api/v1/content/:schema_slug/:entry_id
+```
+Returns `204` on success.
+
+---
+
+### Content — single kind
+
+Use these endpoints for schemas where `kind` is `single`. These schemas have
+exactly one entry with no id.
+
+#### Get the entry
+```
+GET /api/v1/content/:schema_slug/single
+```
+Returns the entry object, or 404 if not yet set.
+
+#### Create or update the entry
+```
+PUT /api/v1/content/:schema_slug/single
+Content-Type: application/json
+```
+Body: a JSON object with the fields to set. This upserts — it creates if absent,
+updates if present. Returns `200` on success.
+
+#### Delete the entry
+```
+DELETE /api/v1/content/:schema_slug/single
+```
+Returns `204` on success.
+
+---
+
+### Uploads
+
+File uploads are stored content-addressed (SHA-256). The `upload` format field
+type stores a reference object `{"hash": "...", "filename": "...", "mime": "..."}`.
+
+#### Upload a file
+```
+POST /api/v1/uploads
+Content-Type: multipart/form-data
+```
+Include the file as a multipart field. Returns:
+```json
+{
+  "hash": "<sha256>",
+  "filename": "image.png",
+  "mime": "image/png",
+  "size": 12345
+}
+```
+To set an upload field on an entry, use this object as the field value.
+
+#### Retrieve a file
+```
+GET /api/v1/uploads/:hash
+```
+Returns the raw file bytes with correct Content-Type header.
+
+---
+
+### Export and import
+
+These require `admin` role.
+
+#### Export a bundle
+```
+POST /api/v1/export
+```
+Returns a `tar.gz` file containing all schemas, content, and uploads.
+
+#### Import a bundle
+```
+POST /api/v1/import
+Content-Type: multipart/form-data
+```
+Include the bundle as a multipart field named `bundle`. This overwrites all
+current content with the bundle contents. Returns `{"status": "ok"}`.
+
+---
+
+### Publish
+
+Triggers a configured webhook to rebuild the static site.
+
+```
+POST /api/v1/publish/staging
+POST /api/v1/publish/production
+```
+- `staging` fires the staging webhook immediately.
+- `production` promotes all drafts to published, then fires the production webhook.
+
+Returns `{"status": "triggered"}` on success, or 404 if no webhook is configured
+for that environment.
+
+---
+
+## Workflows
+
+These are the most common multi-step tasks. Follow each sequence in order.
+
+### Read existing content and add new entries matching the style
+
+1. Call `GET /api/v1/schemas` to discover available content types and their fields.
+2. Identify the relevant schema slug from the response (e.g. `blog-posts`).
+3. Call `GET /api/v1/content/<slug>?status=all` to read all existing entries.
+4. Analyse the existing entries to understand tone, structure, and field usage.
+5. For each new entry, construct a JSON body using the same fields and style.
+6. Call `POST /api/v1/content/<slug>` for each new entry.
+7. Optionally call `POST /api/v1/publish/staging` to trigger a rebuild.
+
+### Update site settings or global configuration
+
+1. Call `GET /api/v1/schemas` and find schemas with `kind: "single"`.
+2. Call `GET /api/v1/content/<slug>/single` to read the current value.
+3. Modify the fields the user requested.
+4. Call `PUT /api/v1/content/<slug>/single` with the full updated object.
+
+### Edit an existing entry
+
+1. Call `GET /api/v1/content/<slug>?status=all&q=<keyword>` to locate the entry.
+2. Note the entry's identifying field value to reconstruct its id (slugified first
+   string field). Or call `GET /api/v1/content/<slug>` and find by field value.
+3. Call `GET /api/v1/content/<slug>/<id>` to retrieve the full entry.
+4. Apply the user's requested changes to the entry object.
+5. Call `PUT /api/v1/content/<slug>/<id>` with the full modified object.
+
+### Create a new content type (schema)
+
+Schemas are managed through the CMS web UI, not the API. If a user asks you to
+create a new content type, instruct them to go to the Schemas section in the CMS
+UI and create it there. Once created, the new schema and its slug will appear in
+`GET /api/v1/schemas`.
+
+---
+
+## Rules and constraints
+
+- Never add fields to the `required` array in a schema. Leave `required` as `[]`.
+- When updating an entry, always send the complete object — partial patches are
+  not supported. First read the entry, then modify, then write the full object back.
+- Entry ids are auto-generated on creation from the first string field. You cannot
+  choose the id manually.
+- The `?status=all` parameter is required to see draft entries. The default is
+  `published` only.
+- The `single` kind uses a different URL pattern than `collection`. Do not use
+  `/content/:slug/:id` for single-kind schemas; use `/content/:slug/single`.
+- Rate limit is 100 API requests per minute per IP. Space out bulk operations if
+  creating many entries at once.

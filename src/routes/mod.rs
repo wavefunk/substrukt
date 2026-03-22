@@ -42,6 +42,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
+        .route("/llms.txt", axum::routing::get(serve_llms_txt))
         .fallback(not_found)
         .layer(middleware::from_fn(metrics::track_metrics))
         .layer(CatchPanicLayer::custom(handle_panic))
@@ -55,6 +56,13 @@ fn handle_panic(_err: Box<dyn std::any::Any + Send + 'static>) -> axum::response
         Html(html.to_string()),
     )
         .into_response()
+}
+
+async fn serve_llms_txt() -> impl IntoResponse {
+    (
+        [("content-type", "text/plain; charset=utf-8")],
+        include_str!("../../llms.txt"),
+    )
 }
 
 async fn not_found(
