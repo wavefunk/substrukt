@@ -22,6 +22,27 @@ fn datefmt(value: &str) -> String {
     value.to_string()
 }
 
+/// Minijinja filter: format a JSON details string as human-readable key-value pairs.
+/// Input: '{"name":"Production","slug":"prod"}' or any string
+/// Output: "name: Production, slug: prod"
+/// Falls back to the original string if JSON parsing fails or if it's not an object.
+fn fmtdetails(value: &str) -> String {
+    if let Ok(serde_json::Value::Object(map)) = serde_json::from_str(value) {
+        let pairs: Vec<String> = map
+            .iter()
+            .map(|(k, v)| {
+                let display = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                format!("{k}: {display}")
+            })
+            .collect();
+        return pairs.join(", ");
+    }
+    value.to_string()
+}
+
 pub fn create_reloader() -> AutoReloader {
     AutoReloader::new(move |notifier| {
         let mut env = Environment::new();
@@ -45,6 +66,7 @@ pub fn create_reloader() -> AutoReloader {
         env.add_global("base_template", minijinja::Value::from("base.html"));
 
         env.add_filter("datefmt", datefmt);
+        env.add_filter("fmtdetails", fmtdetails);
 
         Ok(env)
     })

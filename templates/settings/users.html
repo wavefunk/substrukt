@@ -35,7 +35,7 @@
             {% elif u.role == 'editor' %}bg-accent-soft text-accent
             {% else %}bg-card-alt text-muted{% endif %}">{{ u.role }}</span>
         </td>
-        <td class="px-4 py-2.5 text-muted text-sm">{{ u.created_at }}</td>
+        <td class="px-4 py-2.5 text-muted text-sm">{{ u.created_at|datefmt }}</td>
       </tr>
       {% endfor %}
     </tbody>

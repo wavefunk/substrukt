@@ -65,7 +65,7 @@
           {% if entry.resource_id %}{{ entry.resource_type }} / {{ entry.resource_id }}{% else %}{{ entry.resource_type }}{% endif %}
         </td>
         <td class="px-4 py-2.5 text-sm text-muted font-mono">
-          {% if entry.details %}{{ entry.details[:80] }}{% if entry.details|length > 80 %}…{% endif %}{% else %}—{% endif %}
+          {% if entry.details %}{% set fmt = entry.details|fmtdetails %}{{ fmt[:80] }}{% if fmt|length > 80 %}…{% endif %}{% else %}—{% endif %}
         </td>
       </tr>
       {% endfor %}
