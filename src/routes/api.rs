@@ -76,6 +76,14 @@ pub struct ListParams {
     pub render: String,
 }
 
+fn should_render(params_render: &str, schema_render: Option<&str>) -> bool {
+    match params_render {
+        "html" => true,
+        "raw" => false,
+        _ => schema_render == Some("html"),
+    }
+}
+
 pub fn api_global_routes() -> Router<AppState> {
     Router::new()
         .route("/openapi.json", get(openapi_spec))
@@ -319,7 +327,7 @@ async fn list_entries(
                 .map(|e| {
                     let mut d = content::strip_internal_status(&e.data);
                     resolve_references(&mut d, &schema_file.schema, &state.cache, &app.app.slug);
-                    if params.render == "html" {
+                    if should_render(&params.render, schema_file.meta.render.as_deref()) {
                         content::render_markdown_fields(&mut d, &schema_file.schema);
                     }
                     d
@@ -357,12 +365,13 @@ async fn get_entry(
         Ok(Some(entry)) => {
             let mut data = content::strip_internal_status(&entry.data);
             resolve_references(&mut data, &schema_file.schema, &state.cache, &app.app.slug);
-            if params.render == "html" {
+            let render = should_render(&params.render, schema_file.meta.render.as_deref());
+            if render {
                 content::render_markdown_fields(&mut data, &schema_file.schema);
             }
             // Bypass ETag cache for rendered responses to avoid serving
             // a cached raw-markdown ETag for a rendered response or vice versa
-            let cache_key = if params.render == "html" {
+            let cache_key = if render {
                 None
             } else {
                 Some(format!("{}/{}/{}", app.app.slug, schema_slug, entry_id))
@@ -596,7 +605,7 @@ async fn get_single(
 
             let mut data = content::strip_internal_status(&entry.data);
             resolve_references(&mut data, &schema_file.schema, &state.cache, &app.app.slug);
-            if params.render == "html" {
+            if should_render(&params.render, schema_file.meta.render.as_deref()) {
                 content::render_markdown_fields(&mut data, &schema_file.schema);
             }
             Json(data).into_response()

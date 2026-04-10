@@ -453,7 +453,12 @@ fn generate_entry_id(schema: &SchemaFile, data: &Value) -> String {
 
 /// Render a markdown string to sanitized HTML using pulldown-cmark with GFM extensions.
 /// Raw HTML in the markdown input is stripped (not passed through) as a security measure.
+/// Output is wrapped in `<div class="sk-markdown">...</div>` for CSS scoping.
+/// Returns empty string for empty input (no wrapper).
 pub fn render_markdown(input: &str) -> String {
+    if input.is_empty() {
+        return String::new();
+    }
     use pulldown_cmark::{Event, Options, Parser, html};
 
     let mut options = Options::empty();
@@ -465,8 +470,9 @@ pub fn render_markdown(input: &str) -> String {
     // Strip raw HTML events to prevent XSS in rendered output
     let parser = parser.filter(|event| !matches!(event, Event::Html(_) | Event::InlineHtml(_)));
 
-    let mut html_output = String::new();
+    let mut html_output = String::from("<div class=\"sk-markdown\">");
     html::push_html(&mut html_output, parser);
+    html_output.push_str("</div>");
     html_output
 }
 
@@ -530,6 +536,7 @@ mod tests {
                 kind,
                 storage,
                 id_field: None,
+                render: None,
             },
             schema: json!({
                 "type": "object",
@@ -899,6 +906,8 @@ mod tests {
     fn render_markdown_basic() {
         let html =
             render_markdown("# Hello\n\nThis is **bold** and a [link](https://example.com).");
+        assert!(html.starts_with("<div class=\"sk-markdown\">"));
+        assert!(html.ends_with("</div>"));
         assert!(html.contains("<h1>Hello</h1>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<a href=\"https://example.com\">link</a>"));

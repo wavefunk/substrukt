@@ -11,6 +11,9 @@ pub struct SubstruktMeta {
     /// Which field to use as entry ID (for directory mode). Defaults to first string field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id_field: Option<String>,
+    /// Default render mode for markdown fields in API responses ("html" to render by default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render: Option<String>,
 }
 
 fn default_storage() -> StorageMode {

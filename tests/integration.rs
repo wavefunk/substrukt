@@ -345,6 +345,16 @@ const MARKDOWN_SINGLE_SCHEMA: &str = r#"{
     "required": ["heading"]
 }"#;
 
+const MARKDOWN_RENDER_DEFAULT_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Pages", "slug": "pages", "storage": "directory", "render": "html"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "body": {"type": "string", "format": "markdown", "title": "Body"}
+    },
+    "required": ["title"]
+}"#;
+
 #[tokio::test]
 async fn schema_create_and_list() {
     let s = TestServer::start().await;
@@ -6855,6 +6865,10 @@ async fn api_render_html_get_entry() {
     let entry: serde_json::Value = resp.json().await.unwrap();
     let body_html = entry["body"].as_str().unwrap();
     assert!(
+        body_html.starts_with("<div class=\"sk-markdown\">"),
+        "expected sk-markdown wrapper, got: {body_html}"
+    );
+    assert!(
         body_html.contains("<h1>Hello</h1>"),
         "expected h1, got: {body_html}"
     );
@@ -7005,4 +7019,66 @@ async fn api_render_html_no_markdown_fields_unchanged() {
     let entry: serde_json::Value = resp.json().await.unwrap();
     // body field has format: textarea, NOT format: markdown, so it should NOT be rendered
     assert_eq!(entry["body"], "**not markdown**");
+}
+
+#[tokio::test]
+async fn api_render_schema_default_renders_without_param() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-default-test").await;
+    s.create_schema(MARKDOWN_RENDER_DEFAULT_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create an entry with markdown content
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/pages"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Default Render", "body": "**bold text**"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // GET without render param should render by default (schema has render: "html")
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/pages/{entry_id}?status=all"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    let body_html = entry["body"].as_str().unwrap();
+    assert!(
+        body_html.contains("<strong>bold text</strong>"),
+        "schema default render=html should render markdown, got: {body_html}"
+    );
+    assert!(
+        body_html.starts_with("<div class=\"sk-markdown\">"),
+        "expected sk-markdown wrapper, got: {body_html}"
+    );
+
+    // GET with render=raw should override schema default and return raw markdown
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/pages/{entry_id}?status=all&render=raw"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        entry["body"], "**bold text**",
+        "render=raw should override schema default"
+    );
 }
