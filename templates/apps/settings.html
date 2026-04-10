@@ -9,7 +9,13 @@
 {% if flash_kind == "token" %}
 <div class="bg-success-soft border border-success text-success p-4 rounded mb-6">
   <div class="font-medium mb-1">Token created! Copy it now — it won't be shown again:</div>
-  <code class="block bg-card-alt text-primary p-2 rounded mt-2 text-sm font-mono break-all select-all">{{ flash_message | replace("Token created: ", "") }}</code>
+  <div class="flex items-center gap-2 mt-2">
+    <code id="token-value" class="flex-1 bg-card-alt text-primary p-2 rounded text-sm font-mono break-all select-all">{{ flash_message | replace("Token created: ", "") }}</code>
+    <button type="button" onclick="copyToClipboard('token-value', this)"
+      class="shrink-0 bg-card-alt border border-border text-primary px-3 py-2 rounded text-sm hover:bg-card transition-colors">
+      Copy
+    </button>
+  </div>
 </div>
 {% elif flash_kind == "success" %}
 <div class="bg-success-soft border border-success text-success p-4 rounded mb-6">{{ flash_message }}</div>
@@ -22,7 +28,8 @@
   <h2 class="text-lg font-medium mb-4">App Name</h2>
   <form method="post" action="/apps/{{ app.slug }}/settings" class="flex gap-3" hx-boost="false">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="text" name="name" value="{{ app.name }}" required
+    <label for="app-name" class="sr-only">App Name</label>
+    <input type="text" id="app-name" name="name" value="{{ app.name }}" required
       class="flex-1 px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
     <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
       Update

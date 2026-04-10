@@ -6,7 +6,13 @@
 {% if invite_url %}
 <div class="bg-success-soft border border-success text-success p-4 rounded mb-6">
   <div class="font-medium mb-1">Invitation created! Share this link with the user:</div>
-  <code class="block bg-card-alt text-primary p-2 rounded mt-2 text-sm font-mono break-all select-all">{{ invite_url }}</code>
+  <div class="flex items-center gap-2 mt-2">
+    <code id="invite-url-value" class="flex-1 bg-card-alt text-primary p-2 rounded text-sm font-mono break-all select-all">{{ invite_url }}</code>
+    <button type="button" onclick="copyToClipboard('invite-url-value', this)"
+      class="shrink-0 bg-card-alt border border-border text-primary px-3 py-2 rounded text-sm hover:bg-card transition-colors">
+      Copy
+    </button>
+  </div>
 </div>
 {% endif %}
 
@@ -51,7 +57,7 @@
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <input type="email" name="email" placeholder="Email address" required
       class="flex-1 px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
-    <select name="role" class="px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent">
+    <select name="role" aria-label="Role" class="px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent">
       <option value="editor">Editor</option>
       <option value="viewer">Viewer</option>
       <option value="admin">Admin</option>

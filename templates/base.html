@@ -312,6 +312,14 @@
     document.body.addEventListener('htmx:afterSettle', function() {
       highlightActiveNav();
     });
+    function copyToClipboard(elementId, btn) {
+      var text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = original; }, 2000);
+      });
+    }
     function toggleTheme() {
       var isDark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
