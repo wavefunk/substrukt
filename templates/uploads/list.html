@@ -10,7 +10,7 @@
     onsubmit="this.querySelectorAll('input,select').forEach(function(el){if(!el.value)el.disabled=true})">
     <input type="text" name="q" value="{{ filter_q }}" placeholder="Search by filename..."
       class="px-3 py-2 bg-input-bg border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent flex-1">
-    <select name="schema" class="px-3 py-2 bg-input-bg border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent">
+    <select name="schema" aria-label="Filter by schema" class="px-3 py-2 bg-input-bg border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent">
       <option value="">All schemas</option>
       {% for s in schemas %}
       <option value="{{ s.slug }}" {% if filter_schema == s.slug %}selected{% endif %}>{{ s.title }}</option>
