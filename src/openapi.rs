@@ -557,6 +557,13 @@ fn add_single_content_routes(
                         "required": false,
                         "schema": { "type": "string", "enum": ["published", "draft", "all"], "default": "published" },
                         "description": "Filter by publish status"
+                    },
+                    {
+                        "name": "render",
+                        "in": "query",
+                        "required": false,
+                        "schema": { "type": "string", "enum": ["html"] },
+                        "description": "Set to 'html' to render markdown fields as HTML in the response"
                     }
                 ],
                 "responses": merge_responses(json!({
@@ -642,6 +649,13 @@ fn add_collection_content_routes(
                         "required": false,
                         "schema": { "type": "string", "enum": ["published", "draft", "all"], "default": "published" },
                         "description": "Filter by publish status"
+                    },
+                    {
+                        "name": "render",
+                        "in": "query",
+                        "required": false,
+                        "schema": { "type": "string", "enum": ["html"] },
+                        "description": "Set to 'html' to render markdown fields as HTML in the response"
                     }
                 ],
                 "responses": merge_responses(json!({
@@ -713,6 +727,13 @@ fn add_collection_content_routes(
                         "in": "path",
                         "required": true,
                         "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "render",
+                        "in": "query",
+                        "required": false,
+                        "schema": { "type": "string", "enum": ["html"] },
+                        "description": "Set to 'html' to render markdown fields as HTML in the response"
                     }
                 ],
                 "responses": merge_responses(json!({
