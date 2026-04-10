@@ -470,6 +470,52 @@ pub fn render_markdown(input: &str) -> String {
     html_output
 }
 
+/// Walk a JSON value and render all markdown fields to HTML, based on the schema.
+/// Only transforms fields where the schema declares `"type": "string", "format": "markdown"`.
+pub fn render_markdown_fields(data: &mut Value, schema: &Value) {
+    render_markdown_fields_inner(data, schema, 0);
+}
+
+fn render_markdown_fields_inner(data: &mut Value, schema: &Value, depth: usize) {
+    if depth > MAX_NESTING_DEPTH {
+        return;
+    }
+    let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
+        return;
+    };
+    let Some(obj) = data.as_object_mut() else {
+        return;
+    };
+    for (key, prop_schema) in props {
+        let field_type = prop_schema.get("type").and_then(|t| t.as_str());
+        let format = prop_schema.get("format").and_then(|f| f.as_str());
+
+        match (field_type, format) {
+            (Some("string"), Some("markdown")) => {
+                if let Some(md) = obj.get(key).and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                    let html = render_markdown(&md);
+                    obj.insert(key.clone(), Value::String(html));
+                }
+            }
+            (Some("object"), _) => {
+                if let Some(nested) = obj.get_mut(key) {
+                    render_markdown_fields_inner(nested, prop_schema, depth + 1);
+                }
+            }
+            (Some("array"), _) => {
+                if let Some(items_schema) = prop_schema.get("items") {
+                    if let Some(Value::Array(arr)) = obj.get_mut(key) {
+                        for item in arr.iter_mut() {
+                            render_markdown_fields_inner(item, items_schema, depth + 1);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -900,5 +946,134 @@ mod tests {
         // The text content is preserved (without the tags)
         assert!(html.contains("Hello"));
         assert!(html.contains("world"));
+    }
+
+    #[test]
+    fn render_markdown_fields_transforms_markdown_only() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string", "title": "Title" },
+                "body": { "type": "string", "format": "markdown", "title": "Body" },
+                "count": { "type": "number" },
+                "active": { "type": "boolean" }
+            }
+        });
+        let mut data = json!({
+            "title": "Hello",
+            "body": "**bold**",
+            "count": 42,
+            "active": true
+        });
+        render_markdown_fields(&mut data, &schema);
+
+        // Markdown field is rendered
+        assert!(data["body"].as_str().unwrap().contains("<strong>bold</strong>"));
+        // Other fields are untouched
+        assert_eq!(data["title"], "Hello");
+        assert_eq!(data["count"], 42);
+        assert_eq!(data["active"], true);
+    }
+
+    #[test]
+    fn render_markdown_fields_nested_object() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "type": "object",
+                    "properties": {
+                        "description": { "type": "string", "format": "markdown" }
+                    }
+                }
+            }
+        });
+        let mut data = json!({
+            "meta": {
+                "description": "# Heading"
+            }
+        });
+        render_markdown_fields(&mut data, &schema);
+        assert!(data["meta"]["description"].as_str().unwrap().contains("<h1>Heading</h1>"));
+    }
+
+    #[test]
+    fn render_markdown_fields_array_of_objects() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "body": { "type": "string", "format": "markdown" }
+                        }
+                    }
+                }
+            }
+        });
+        let mut data = json!({
+            "sections": [
+                { "body": "**first**" },
+                { "body": "*second*" }
+            ]
+        });
+        render_markdown_fields(&mut data, &schema);
+        assert!(data["sections"][0]["body"].as_str().unwrap().contains("<strong>first</strong>"));
+        assert!(data["sections"][1]["body"].as_str().unwrap().contains("<em>second</em>"));
+    }
+
+    #[test]
+    fn render_markdown_fields_skips_null() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown" }
+            }
+        });
+        let mut data = json!({ "body": null });
+        render_markdown_fields(&mut data, &schema);
+        assert!(data["body"].is_null());
+    }
+
+    #[test]
+    fn render_markdown_fields_skips_non_markdown_format() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "notes": { "type": "string", "format": "textarea" },
+                "body": { "type": "string", "format": "markdown" }
+            }
+        });
+        let mut data = json!({
+            "notes": "**not rendered**",
+            "body": "**rendered**"
+        });
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data["notes"], "**not rendered**");
+        assert!(data["body"].as_str().unwrap().contains("<strong>rendered</strong>"));
+    }
+
+    #[test]
+    fn render_markdown_fields_respects_depth_limit() {
+        // Build a schema nested 40 levels deep (exceeds MAX_NESTING_DEPTH of 32)
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown" }
+            }
+        });
+        for _ in 0..40 {
+            schema = json!({
+                "type": "object",
+                "properties": {
+                    "nested": schema
+                }
+            });
+        }
+        let mut data = json!({ "nested": {} });
+        // Should not panic or stack overflow -- just silently stops at depth limit
+        render_markdown_fields(&mut data, &schema);
     }
 }
