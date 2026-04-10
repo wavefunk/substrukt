@@ -490,7 +490,8 @@ fn render_field(
             )
         }
         ("object", _) => {
-            let inner = render_form_fields_inner(schema, value, name, ref_options, app_slug, depth + 1);
+            let inner =
+                render_form_fields_inner(schema, value, name, ref_options, app_slug, depth + 1);
             format!(
                 r#"<fieldset class="mb-4 p-4 border border-border-light rounded-md">
   <legend class="text-sm font-medium text-secondary px-2">{label}</legend>
@@ -898,7 +899,13 @@ mod tests {
                 "mime": "image/png"
             }
         });
-        let html = render_form_fields(&schema, Some(&data), "", &ReferenceOptions::new(), "test-app");
+        let html = render_form_fields(
+            &schema,
+            Some(&data),
+            "",
+            &ReferenceOptions::new(),
+            "test-app",
+        );
         assert!(
             html.contains("<img"),
             "should show image thumbnail for image MIME"
@@ -931,7 +938,13 @@ mod tests {
                 "mime": "application/pdf"
             }
         });
-        let html = render_form_fields(&schema, Some(&data), "", &ReferenceOptions::new(), "test-app");
+        let html = render_form_fields(
+            &schema,
+            Some(&data),
+            "",
+            &ReferenceOptions::new(),
+            "test-app",
+        );
         assert!(
             !html.contains("<img"),
             "should NOT show thumbnail for non-image"
@@ -1118,7 +1131,13 @@ mod tests {
         let data = json!({
             "body": "Hello world"
         });
-        let html = render_form_fields(&schema, Some(&data), "", &ReferenceOptions::new(), "test-app");
+        let html = render_form_fields(
+            &schema,
+            Some(&data),
+            "",
+            &ReferenceOptions::new(),
+            "test-app",
+        );
         assert!(
             html.contains(">Hello world</textarea>"),
             "should preserve existing value inside textarea"

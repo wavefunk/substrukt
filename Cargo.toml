@@ -43,6 +43,7 @@ metrics-exporter-prometheus = "0.16"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 rust-s3 = { version = "0.37", default-features = false, features = ["tokio-rustls-tls"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 
 [build-dependencies]
 minijinja-embed = "2"

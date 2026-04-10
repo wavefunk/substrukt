@@ -48,6 +48,41 @@
       --success-soft: #052e16;
       --input-bg: #27272a;
     }
+    .dark .EasyMDEContainer .CodeMirror {
+      background: var(--input-bg);
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+    .dark .EasyMDEContainer .CodeMirror-cursor {
+      border-left-color: var(--text-primary);
+    }
+    .dark .EasyMDEContainer .editor-toolbar {
+      background: var(--card);
+      border-color: var(--border);
+    }
+    .dark .EasyMDEContainer .editor-toolbar button {
+      color: var(--text-secondary) !important;
+    }
+    .dark .EasyMDEContainer .editor-toolbar button:hover,
+    .dark .EasyMDEContainer .editor-toolbar button.active {
+      background: var(--card-alt);
+      color: var(--text-primary) !important;
+    }
+    .dark .EasyMDEContainer .editor-preview,
+    .dark .EasyMDEContainer .editor-preview-side {
+      background: var(--card);
+      color: var(--text-primary);
+    }
+    .dark .EasyMDEContainer .editor-preview pre,
+    .dark .EasyMDEContainer .editor-preview-side pre {
+      background: var(--card-alt);
+    }
+    .dark .EasyMDEContainer .CodeMirror-selected {
+      background: var(--accent-soft) !important;
+    }
+    .dark .EasyMDEContainer .editor-toolbar.disabled-for-preview button:not(.no-disable) {
+      opacity: 0.4;
+    }
     *, *::before, *::after {
       transition: background-color 0.15s, color 0.15s, border-color 0.15s;
     }
@@ -134,7 +169,17 @@
           element: el,
           spellChecker: false,
           status: false,
-          forceSync: true
+          forceSync: true,
+          toolbar: [
+            'bold', 'italic', 'strikethrough', '|',
+            'heading-1', 'heading-2', 'heading-3', '|',
+            'code', 'quote', 'unordered-list', 'ordered-list', '|',
+            'link', 'image', 'horizontal-rule', '|',
+            'preview', 'side-by-side', 'fullscreen', '|',
+            'guide'
+          ],
+          previewClass: ['editor-preview', 'markdown-body'],
+          sideBySideFullscreen: false
         });
       });
     }

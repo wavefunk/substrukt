@@ -325,6 +325,26 @@ const BLOG_SCHEMA: &str = r#"{
     "required": ["title"]
 }"#;
 
+const MARKDOWN_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Articles", "slug": "articles", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "body": {"type": "string", "format": "markdown", "title": "Body"}
+    },
+    "required": ["title"]
+}"#;
+
+const MARKDOWN_SINGLE_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "About Page", "slug": "about", "kind": "single", "storage": "single-file"},
+    "type": "object",
+    "properties": {
+        "heading": {"type": "string", "title": "Heading"},
+        "content": {"type": "string", "format": "markdown", "title": "Content"}
+    },
+    "required": ["heading"]
+}"#;
+
 #[tokio::test]
 async fn schema_create_and_list() {
     let s = TestServer::start().await;
@@ -6781,4 +6801,208 @@ async fn change_password_mismatch() {
         .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("New passwords do not match"));
+}
+
+// ── Markdown rendering tests ────────────────────────────────────
+
+#[tokio::test]
+async fn api_render_html_get_entry() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-test").await;
+    s.create_schema(MARKDOWN_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create an entry with markdown content
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Test Post", "body": "# Hello\n\nThis is **bold**."}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // GET without render param returns raw markdown
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(entry["body"], "# Hello\n\nThis is **bold**.");
+
+    // GET with render=html returns rendered HTML
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all&render=html"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    let body_html = entry["body"].as_str().unwrap();
+    assert!(
+        body_html.contains("<h1>Hello</h1>"),
+        "expected h1, got: {body_html}"
+    );
+    assert!(
+        body_html.contains("<strong>bold</strong>"),
+        "expected strong, got: {body_html}"
+    );
+    // Title is a plain string (no format: markdown), should be untouched
+    assert_eq!(entry["title"], "Test Post");
+}
+
+#[tokio::test]
+async fn api_render_html_list_entries() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-list-test").await;
+    s.create_schema(MARKDOWN_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create two entries
+    api.post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Post 1", "body": "**one**"}))
+        .send()
+        .await
+        .unwrap();
+    api.post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Post 2", "body": "*two*"}))
+        .send()
+        .await
+        .unwrap();
+
+    // List with render=html
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/articles?status=all&render=html"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entries: Vec<serde_json::Value> = resp.json().await.unwrap();
+    assert_eq!(entries.len(), 2);
+
+    // All entries should have rendered markdown
+    let all_rendered = entries.iter().all(|e| {
+        let body = e["body"].as_str().unwrap_or("");
+        body.contains("<strong>") || body.contains("<em>")
+    });
+    assert!(
+        all_rendered,
+        "all entries should have rendered markdown bodies"
+    );
+}
+
+#[tokio::test]
+async fn api_render_html_get_single() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-single-test").await;
+    s.create_schema(MARKDOWN_SINGLE_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Upsert the single entry
+    let resp = api
+        .put(s.url("/api/v1/apps/default/content/about/single"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"heading": "About Us", "content": "We are **awesome**."}))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_success(),
+        "upsert failed: {}",
+        resp.status()
+    );
+
+    // GET without render returns raw markdown
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/about/single?status=all"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(entry["content"], "We are **awesome**.");
+
+    // GET with render=html returns rendered HTML
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/about/single?status=all&render=html"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    let content_html = entry["content"].as_str().unwrap();
+    assert!(
+        content_html.contains("<strong>awesome</strong>"),
+        "expected strong, got: {content_html}"
+    );
+    assert_eq!(entry["heading"], "About Us");
+}
+
+#[tokio::test]
+async fn api_render_html_no_markdown_fields_unchanged() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-noop-test").await;
+    s.create_schema(BLOG_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create entry with non-markdown schema (BLOG_SCHEMA uses format: textarea, not markdown)
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/blog-posts"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Plain Post", "body": "**not markdown**"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // GET with render=html should return data unchanged (no markdown format fields)
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/blog-posts/{entry_id}?status=all&render=html"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    // body field has format: textarea, NOT format: markdown, so it should NOT be rendered
+    assert_eq!(entry["body"], "**not markdown**");
 }

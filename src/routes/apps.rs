@@ -34,14 +34,8 @@ pub fn routes() -> Router<AppState> {
             axum::routing::post(delete_token),
         )
         .route("/{app_slug}/data", get(data_page))
-        .route(
-            "/{app_slug}/data/import",
-            axum::routing::post(import_data),
-        )
-        .route(
-            "/{app_slug}/data/export",
-            axum::routing::post(export_data),
-        )
+        .route("/{app_slug}/data/import", axum::routing::post(import_data))
+        .route("/{app_slug}/data/export", axum::routing::post(export_data))
         .route("/{app_slug}/delete", axum::routing::post(delete_app))
 }
 
@@ -474,9 +468,7 @@ async fn import_data(
                     "data_result",
                     &serde_json::json!({"status": "error", "message": "No file provided", "warnings": []}).to_string(),
                 ).await;
-                return Ok(
-                    Redirect::to(&format!("/apps/{}/data", app.app.slug)).into_response(),
-                );
+                return Ok(Redirect::to(&format!("/apps/{}/data", app.app.slug)).into_response());
             }
             Err(e) => {
                 auth::set_flash(
@@ -484,9 +476,7 @@ async fn import_data(
                     "data_result",
                     &serde_json::json!({"status": "error", "message": e.to_string(), "warnings": []}).to_string(),
                 ).await;
-                return Ok(
-                    Redirect::to(&format!("/apps/{}/data", app.app.slug)).into_response(),
-                );
+                return Ok(Redirect::to(&format!("/apps/{}/data", app.app.slug)).into_response());
             }
         }
     };

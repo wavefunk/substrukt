@@ -72,6 +72,8 @@ pub struct ListParams {
     pub q: String,
     #[serde(default)]
     pub status: String,
+    #[serde(default)]
+    pub render: String,
 }
 
 pub fn api_global_routes() -> Router<AppState> {
@@ -317,6 +319,9 @@ async fn list_entries(
                 .map(|e| {
                     let mut d = content::strip_internal_status(&e.data);
                     resolve_references(&mut d, &schema_file.schema, &state.cache, &app.app.slug);
+                    if params.render == "html" {
+                        content::render_markdown_fields(&mut d, &schema_file.schema);
+                    }
                     d
                 })
                 .collect();
@@ -332,6 +337,7 @@ async fn get_entry(
     token: BearerToken,
     app: ApiAppContext,
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
+    Query(params): Query<ListParams>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     if let Err(e) = require_token_app(&token, &app) {
@@ -351,8 +357,17 @@ async fn get_entry(
         Ok(Some(entry)) => {
             let mut data = content::strip_internal_status(&entry.data);
             resolve_references(&mut data, &schema_file.schema, &state.cache, &app.app.slug);
-            let cache_key = format!("{}/{}/{}", app.app.slug, schema_slug, entry_id);
-            json_with_etag(&data, &headers, &state.etag_cache, Some(&cache_key))
+            if params.render == "html" {
+                content::render_markdown_fields(&mut data, &schema_file.schema);
+            }
+            // Bypass ETag cache for rendered responses to avoid serving
+            // a cached raw-markdown ETag for a rendered response or vice versa
+            let cache_key = if params.render == "html" {
+                None
+            } else {
+                Some(format!("{}/{}/{}", app.app.slug, schema_slug, entry_id))
+            };
+            json_with_etag(&data, &headers, &state.etag_cache, cache_key.as_deref())
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => internal_error(e).into_response(),
@@ -581,6 +596,9 @@ async fn get_single(
 
             let mut data = content::strip_internal_status(&entry.data);
             resolve_references(&mut data, &schema_file.schema, &state.cache, &app.app.slug);
+            if params.render == "html" {
+                content::render_markdown_fields(&mut data, &schema_file.schema);
+            }
             Json(data).into_response()
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),

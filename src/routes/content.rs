@@ -306,7 +306,13 @@ async fn new_entry_page(
     }
 
     let ref_options = build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
-    let form_html = content_form::render_form_fields(&schema_file.schema, None, "", &ref_options, &app.app.slug);
+    let form_html = content_form::render_form_fields(
+        &schema_file.schema,
+        None,
+        "",
+        &ref_options,
+        &app.app.slug,
+    );
 
     let tmpl = state
         .templates
@@ -465,8 +471,13 @@ async fn create_entry(
         let current_username = auth::current_username(&session).await.unwrap_or_default();
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
-        let form_html =
-            content_form::render_form_fields(&schema_file.schema, Some(&data), "", &ref_options, &app.app.slug);
+        let form_html = content_form::render_form_fields(
+            &schema_file.schema,
+            Some(&data),
+            "",
+            &ref_options,
+            &app.app.slug,
+        );
         if let Ok(tmpl) = state.templates.acquire_env()
             && let Ok(template) = tmpl.get_template("content/edit.html")
             && let Ok(html) = template.render(minijinja::context! {
@@ -581,8 +592,13 @@ async fn update_entry(
         let current_username = auth::current_username(&session).await.unwrap_or_default();
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
-        let form_html =
-            content_form::render_form_fields(&schema_file.schema, Some(&data), "", &ref_options, &app.app.slug);
+        let form_html = content_form::render_form_fields(
+            &schema_file.schema,
+            Some(&data),
+            "",
+            &ref_options,
+            &app.app.slug,
+        );
         if let Ok(tmpl) = state.templates.acquire_env()
             && let Ok(template) = tmpl.get_template("content/edit.html")
             && let Ok(html) = template.render(minijinja::context! {

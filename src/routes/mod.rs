@@ -7,6 +7,7 @@ pub mod schemas;
 pub mod settings;
 pub mod uploads;
 
+use axum::http::header;
 use axum::{
     Router,
     extract::{OriginalUri, Request, State},
@@ -14,7 +15,6 @@ use axum::{
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
 };
-use axum::http::header;
 use axum_htmx::HxRequest;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_sessions::Session;
@@ -55,7 +55,10 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/v1", api_routes)
         .route("/healthz", axum::routing::get(healthz))
         .route("/static/favicon.svg", axum::routing::get(serve_favicon))
-        .route("/static/wavefunk.svg", axum::routing::get(serve_wavefunk_logo))
+        .route(
+            "/static/wavefunk.svg",
+            axum::routing::get(serve_wavefunk_logo),
+        )
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
         .fallback(not_found)
         .layer(middleware::from_fn(metrics::track_metrics))
