@@ -1102,4 +1102,137 @@ mod tests {
         // Should not panic or stack overflow -- just silently stops at depth limit
         render_markdown_fields(&mut data, &schema);
     }
+
+    #[test]
+    fn render_markdown_code_blocks() {
+        let md = "```rust\nfn main() {}\n```";
+        let html = render_markdown(md);
+        assert!(html.contains("<pre>"), "expected <pre>, got: {html}");
+        assert!(html.contains("<code"), "expected <code>, got: {html}");
+        assert!(
+            html.contains("fn main() {}"),
+            "expected code content, got: {html}"
+        );
+    }
+
+    #[test]
+    fn render_markdown_strips_iframe() {
+        let html = render_markdown("Before <iframe src=\"https://evil.com\"></iframe> After");
+        assert!(!html.contains("<iframe"), "iframe should be stripped");
+        assert!(html.contains("Before"));
+        assert!(html.contains("After"));
+    }
+
+    #[test]
+    fn render_markdown_strips_event_handler_attributes() {
+        // <img> with onerror is raw HTML and should be stripped entirely
+        let html = render_markdown("<img src=x onerror=alert(1)>");
+        assert!(
+            !html.contains("onerror"),
+            "onerror attribute should be stripped along with the tag"
+        );
+    }
+
+    #[test]
+    fn render_markdown_fields_non_object_data_is_noop() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown" }
+            }
+        });
+        // Data is a string, not an object -- should not panic
+        let mut data = json!("just a string");
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data, json!("just a string"));
+
+        // Data is an array
+        let mut data = json!(["item1", "item2"]);
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data, json!(["item1", "item2"]));
+
+        // Data is null
+        let mut data = json!(null);
+        render_markdown_fields(&mut data, &schema);
+        assert!(data.is_null());
+    }
+
+    #[test]
+    fn render_markdown_fields_missing_field_in_data() {
+        // Schema declares a markdown field, but data doesn't have it
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string" },
+                "body": { "type": "string", "format": "markdown" }
+            }
+        });
+        let mut data = json!({"title": "Hello"});
+        // Should not panic -- missing body field is silently skipped
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data["title"], "Hello");
+        assert!(data.get("body").is_none());
+    }
+
+    #[test]
+    fn render_markdown_fields_plain_string_no_format() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+        let mut data = json!({"name": "**not rendered**"});
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data["name"], "**not rendered**");
+    }
+
+    #[test]
+    fn render_markdown_fields_multiple_markdown_fields() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "intro": { "type": "string", "format": "markdown" },
+                "body": { "type": "string", "format": "markdown" },
+                "footer": { "type": "string", "format": "markdown" }
+            }
+        });
+        let mut data = json!({
+            "intro": "# Intro",
+            "body": "**body text**",
+            "footer": "*footer*"
+        });
+        render_markdown_fields(&mut data, &schema);
+        assert!(data["intro"].as_str().unwrap().contains("<h1>Intro</h1>"));
+        assert!(
+            data["body"]
+                .as_str()
+                .unwrap()
+                .contains("<strong>body text</strong>")
+        );
+        assert!(data["footer"].as_str().unwrap().contains("<em>footer</em>"));
+    }
+
+    #[test]
+    fn render_markdown_fields_schema_without_properties() {
+        // Schema with no properties key -- should not panic
+        let schema = json!({"type": "object"});
+        let mut data = json!({"body": "**test**"});
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data["body"], "**test**");
+    }
+
+    #[test]
+    fn render_markdown_fields_array_with_no_items_schema() {
+        // Array field without items schema should not attempt to recurse
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "tags": { "type": "array" }
+            }
+        });
+        let mut data = json!({"tags": ["one", "two"]});
+        render_markdown_fields(&mut data, &schema);
+        assert_eq!(data["tags"], json!(["one", "two"]));
+    }
 }

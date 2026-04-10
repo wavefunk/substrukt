@@ -5641,7 +5641,7 @@ async fn test_update_backup_config_without_enabled_disables() {
 // ── Multi-app tests ─���───────────────────────────────────────
 
 /// Extract entry ID from a content list page for any app.
-fn extract_entry_id_for_app(html: &str, app_slug: &str, schema_slug: &str) -> Option<String> {
+fn _extract_entry_id_for_app(html: &str, app_slug: &str, schema_slug: &str) -> Option<String> {
     let pattern = format!("/apps/{app_slug}/content/{schema_slug}/");
     for line in html.lines() {
         if let Some(pos) = line.find(&pattern) {
@@ -7005,4 +7005,180 @@ async fn api_render_html_no_markdown_fields_unchanged() {
     let entry: serde_json::Value = resp.json().await.unwrap();
     // body field has format: textarea, NOT format: markdown, so it should NOT be rendered
     assert_eq!(entry["body"], "**not markdown**");
+}
+
+#[tokio::test]
+async fn api_render_html_invalid_render_value_returns_raw() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("render-invalid-test").await;
+    s.create_schema(MARKDOWN_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create entry
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Test", "body": "**bold**"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // render=xml (unknown value) should return raw markdown, not rendered HTML
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all&render=xml"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        entry["body"], "**bold**",
+        "unknown render value should return raw markdown"
+    );
+}
+
+#[tokio::test]
+async fn api_render_html_etag_cache_not_polluted() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("etag-test").await;
+    s.create_schema(MARKDOWN_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create entry
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "ETag Test", "body": "**bold**"}))
+        .send()
+        .await
+        .unwrap();
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // GET raw version first (populates ETag cache)
+    let resp_raw = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp_raw.status(), StatusCode::OK);
+    let etag_raw = resp_raw
+        .headers()
+        .get("etag")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    // GET rendered version (should bypass ETag cache and have a different ETag)
+    let resp_rendered = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all&render=html"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp_rendered.status(), StatusCode::OK);
+    let etag_rendered = resp_rendered
+        .headers()
+        .get("etag")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    // ETags should differ because the content is different (raw vs rendered)
+    assert_ne!(
+        etag_raw, etag_rendered,
+        "raw and rendered ETags should differ"
+    );
+
+    // GET raw version again -- should still return raw markdown (ETag cache not polluted)
+    let resp_raw2 = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp_raw2.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp_raw2.json().await.unwrap();
+    assert_eq!(
+        entry["body"], "**bold**",
+        "raw response should still return raw markdown after rendered request"
+    );
+}
+
+#[tokio::test]
+async fn api_render_html_strips_xss_in_response() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("xss-test").await;
+    s.create_schema(MARKDOWN_SCHEMA).await;
+
+    let api = Client::builder()
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // Create entry with XSS payload in markdown
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "title": "XSS Test",
+            "body": "Hello <script>alert('xss')</script> world\n\n<iframe src=\"evil\"></iframe>"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let entry_id = created["id"].as_str().unwrap().to_string();
+
+    // GET with render=html should strip all raw HTML
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/articles/{entry_id}?status=all&render=html"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    let body_html = entry["body"].as_str().unwrap();
+    assert!(
+        !body_html.contains("<script"),
+        "script tags should be stripped, got: {body_html}"
+    );
+    assert!(
+        !body_html.contains("<iframe"),
+        "iframe tags should be stripped, got: {body_html}"
+    );
+    assert!(
+        body_html.contains("Hello"),
+        "text content should be preserved"
+    );
 }
