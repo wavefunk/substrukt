@@ -562,8 +562,8 @@ fn add_single_content_routes(
                         "name": "render",
                         "in": "query",
                         "required": false,
-                        "schema": { "type": "string", "enum": ["html"] },
-                        "description": "Set to 'html' to render markdown fields as HTML in the response"
+                        "schema": { "type": "string", "enum": ["html", "raw"] },
+                        "description": "Override markdown rendering: 'html' to render as HTML, 'raw' for raw markdown. Defaults to schema's x-substrukt.render setting (raw if unset)."
                     }
                 ],
                 "responses": merge_responses(json!({
@@ -654,8 +654,8 @@ fn add_collection_content_routes(
                         "name": "render",
                         "in": "query",
                         "required": false,
-                        "schema": { "type": "string", "enum": ["html"] },
-                        "description": "Set to 'html' to render markdown fields as HTML in the response"
+                        "schema": { "type": "string", "enum": ["html", "raw"] },
+                        "description": "Override markdown rendering: 'html' to render as HTML, 'raw' for raw markdown. Defaults to schema's x-substrukt.render setting (raw if unset)."
                     }
                 ],
                 "responses": merge_responses(json!({
@@ -732,8 +732,8 @@ fn add_collection_content_routes(
                         "name": "render",
                         "in": "query",
                         "required": false,
-                        "schema": { "type": "string", "enum": ["html"] },
-                        "description": "Set to 'html' to render markdown fields as HTML in the response"
+                        "schema": { "type": "string", "enum": ["html", "raw"] },
+                        "description": "Override markdown rendering: 'html' to render as HTML, 'raw' for raw markdown. Defaults to schema's x-substrukt.render setting (raw if unset)."
                     }
                 ],
                 "responses": merge_responses(json!({
