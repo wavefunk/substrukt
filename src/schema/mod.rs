@@ -70,8 +70,10 @@ pub fn delete_schema(schemas_dir: &Path, slug: &str) -> eyre::Result<()> {
 fn parse_meta(value: &serde_json::Value) -> eyre::Result<SubstruktMeta> {
     let ext = value
         .get("x-substrukt")
-        .ok_or_else(|| eyre::eyre!("Missing x-substrukt extension"))?;
-    let meta: SubstruktMeta = serde_json::from_value(ext.clone())?;
+        .ok_or_else(|| eyre::eyre!("Schema must include a title and display configuration. Add an \"x-substrukt\" block with \"title\", \"slug\", and \"storage\" fields."))?;
+    let meta: SubstruktMeta = serde_json::from_value(ext.clone()).map_err(|_| {
+        eyre::eyre!("Schema title is required — add a \"title\" field in the schema settings.")
+    })?;
     Ok(meta)
 }
 
