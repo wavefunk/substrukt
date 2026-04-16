@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand};
 use dashmap::DashMap;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+use tower_sessions::MemoryStore;
 use tower_sessions::SessionManagerLayer;
-use tower_sessions_sqlx_store::SqliteStore;
 
 use substrukt::audit;
 use substrukt::auth;
@@ -178,14 +178,37 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     let pool = db::init_pool(&config.db_path).await?;
 
     // Session store
-    let session_store = SqliteStore::new(pool.clone());
-    session_store.migrate().await?;
+    let session_store = MemoryStore::default();
     let session_layer = SessionManagerLayer::new(session_store).with_secure(config.secure_cookies);
 
     // Audit logging (separate database) — must be before template reloader
     let audit_db_path = config.data_dir.join("audit.db");
     let audit_pool = audit::init_pool(&audit_db_path).await?;
     let audit_logger = audit::AuditLogger::new(audit_pool);
+
+    // allowthem auth system (shares substrukt's pool)
+    let ath = allowthem_core::AllowThemBuilder::with_pool(pool.clone())
+        .cookie_secure(config.secure_cookies)
+        .build()
+        .await
+        .expect("Failed to initialize allowthem");
+
+    // Bootstrap roles (idempotent)
+    for role_name in ["admin", "editor", "viewer"] {
+        let rn = allowthem_core::RoleName::new(role_name);
+        if ath.db().get_role_by_name(&rn).await.unwrap_or(None).is_none() {
+            ath.db()
+                .create_role(&rn, None)
+                .await
+                .expect("Failed to create role");
+        }
+    }
+
+    // Check if any users exist (for setup redirect)
+    let has_users = !ath.db().list_users().await.unwrap_or_default().is_empty();
+
+    let auth_client: Arc<dyn allowthem_core::AuthClient> =
+        Arc::new(allowthem_core::EmbeddedAuthClient::new(ath.clone(), "/login"));
 
     // Migrate old single-app layout to multi-app
     substrukt::migrate_single_app_layout(&config.data_dir)?;
@@ -240,6 +263,9 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         backup_running: AtomicBool::new(false),
         backup_cancel: backup_cancel.clone(),
         openapi_cache: Arc::new(std::sync::RwLock::new(None)),
+        ath,
+        auth_client,
+        has_users: AtomicBool::new(has_users),
     });
 
     // Spawn auto-deploy tasks for all enabled deployments
