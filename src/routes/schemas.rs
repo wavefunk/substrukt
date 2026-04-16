@@ -396,6 +396,7 @@ async fn delete_schema(
     Extension(user): Extension<allowthem_core::User>,
     Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
+    session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> impl IntoResponse {
@@ -413,6 +414,7 @@ async fn delete_schema(
         None,
         Some(app.app.id),
     );
+    auth::set_flash(&session, "success", "Schema deleted").await;
     axum::http::StatusCode::NO_CONTENT
 }
 

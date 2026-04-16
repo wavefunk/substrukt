@@ -24,6 +24,7 @@
     <thead class="bg-card-alt">
       <tr>
         <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">ID</th>
+        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Status</th>
         {% for col in columns %}
         <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">{{ col }}</th>
         {% endfor %}
@@ -33,10 +34,12 @@
     <tbody class="divide-y divide-border-light">
       {% for entry in entries %}
       <tr class="hover:bg-card-alt">
-        <td class="px-4 py-2.5 font-mono text-sm text-muted">
-          {{ entry.id }}
-          {% if entry.status == "draft" %}
-          <span class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-accent-soft text-accent">Draft</span>
+        <td class="px-4 py-2.5 font-mono text-sm text-muted">{{ entry.id }}</td>
+        <td class="px-4 py-2.5">
+          {% if entry.status == "published" %}
+          <span class="px-2 py-0.5 rounded text-xs font-medium bg-success-soft text-success">Published</span>
+          {% else %}
+          <span class="px-2 py-0.5 rounded text-xs font-medium bg-accent-soft text-accent">Draft</span>
           {% endif %}
         </td>
         {% for col in entry.columns %}

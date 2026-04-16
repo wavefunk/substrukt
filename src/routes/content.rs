@@ -196,6 +196,60 @@ fn get_display_columns(schema: &serde_json::Value) -> Vec<(String, String)> {
     columns
 }
 
+/// Extract a display title from entry data using the schema's first required string field,
+/// or falling back to the first string property.
+fn extract_entry_title(data: &serde_json::Value, schema: &serde_json::Value) -> Option<String> {
+    let obj = data.as_object()?;
+    let props = schema.get("properties")?.as_object()?;
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    // Try required string fields first
+    for key in &required {
+        if *key == "_id" || *key == "_status" {
+            continue;
+        }
+        let is_string = props
+            .get(*key)
+            .and_then(|p| p.get("type"))
+            .and_then(|t| t.as_str())
+            == Some("string");
+        let is_upload = props
+            .get(*key)
+            .and_then(|p| p.get("format"))
+            .and_then(|f| f.as_str())
+            == Some("upload");
+        if is_string && !is_upload {
+            if let Some(serde_json::Value::String(s)) = obj.get(*key) {
+                if !s.is_empty() {
+                    return Some(s.clone());
+                }
+            }
+        }
+    }
+
+    // Fall back to first non-empty string property
+    for (key, prop) in props {
+        if key == "_id" || key == "_status" {
+            continue;
+        }
+        let is_string = prop.get("type").and_then(|t| t.as_str()) == Some("string");
+        let is_upload = prop.get("format").and_then(|f| f.as_str()) == Some("upload");
+        if is_string && !is_upload {
+            if let Some(serde_json::Value::String(s)) = obj.get(key) {
+                if !s.is_empty() {
+                    return Some(s.clone());
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn build_reference_options(
     schema: &serde_json::Value,
     cache: &ContentCache,
@@ -395,6 +449,10 @@ async fn edit_entry_page(
         .map(|d| content::get_entry_status(d).to_string())
         .unwrap_or_else(|| "draft".to_string());
 
+    let entry_title = existing_data
+        .as_ref()
+        .and_then(|d| extract_entry_title(d, &schema_file.schema));
+
     let ref_options = build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
     let form_html = content_form::render_form_fields(
         &schema_file.schema,
@@ -425,6 +483,7 @@ async fn edit_entry_page(
             schema_title => schema_file.meta.title,
             schema_slug => schema_slug,
             entry_id => entry_id,
+            entry_title => entry_title,
             is_new => is_new,
             is_single => is_single,
             form_fields => form_html,

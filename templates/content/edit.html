@@ -1,9 +1,9 @@
 {% extends base_template %}
-{% block title %}{% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% else %}Edit {{ schema_title }}{% endif %} — Substrukt{% endblock %}
+{% block title %}{% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% elif entry_title %}{{ entry_title }} — {{ schema_title }}{% else %}Edit {{ schema_title }}{% endif %} — Substrukt{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold tracking-tight">
-    {% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% else %}Edit {{ schema_title }}{% endif %}
+    {% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% elif entry_title %}{{ entry_title }} <span class="text-base font-normal text-muted">({{ schema_title }})</span>{% else %}Edit {{ schema_title }}{% endif %}
     {% if not is_new %}{% include "content/_status_control.html" %}{% endif %}
   </h1>
   {% if not is_single %}

@@ -14,6 +14,13 @@ fn datefmt(value: &str) -> String {
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
         return dt.format("%b %-d, %Y %-I:%M %p").to_string();
     }
+    // Try with fractional seconds and " UTC" suffix (allowthem's created_at.to_string() format)
+    let trimmed = value.trim_end_matches(" UTC");
+    if trimmed != value {
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S%.f") {
+            return dt.format("%b %-d, %Y %-I:%M %p").to_string();
+        }
+    }
     // Try just the date-time portion if it has a T separator but no timezone
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
         return dt.format("%b %-d, %Y %-I:%M %p").to_string();
