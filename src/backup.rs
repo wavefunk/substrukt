@@ -224,15 +224,21 @@ pub async fn create_archive(
     let main_db_snapshot = temp_dir.join("substrukt.db");
     let audit_db_snapshot = temp_dir.join("audit.db");
 
-    sqlx::query(&format!("VACUUM INTO '{}'", main_db_snapshot.display()))
-        .execute(main_pool)
-        .await
-        .wrap_err("Failed to snapshot main database")?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "VACUUM INTO '{}'",
+        main_db_snapshot.display()
+    )))
+    .execute(main_pool)
+    .await
+    .wrap_err("Failed to snapshot main database")?;
 
-    sqlx::query(&format!("VACUUM INTO '{}'", audit_db_snapshot.display()))
-        .execute(audit_pool)
-        .await
-        .wrap_err("Failed to snapshot audit database")?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "VACUUM INTO '{}'",
+        audit_db_snapshot.display()
+    )))
+    .execute(audit_pool)
+    .await
+    .wrap_err("Failed to snapshot audit database")?;
 
     // Build tar.gz
     let archive_file = std::fs::File::create(&archive_path)?;

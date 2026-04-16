@@ -575,7 +575,7 @@ impl AuditLogger {
                 String,
                 String,
             ),
-        >(&query);
+        >(sqlx::AssertSqlSafe(query));
 
         if let Some(dep_id) = deployment_id {
             q = q.bind(dep_id);
@@ -680,7 +680,7 @@ impl AuditLogger {
                 Option<String>,
                 Option<i64>,
             ),
-        >(&query);
+        >(sqlx::AssertSqlSafe(query));
 
         if let Some(action) = action_filter {
             q = q.bind(action);

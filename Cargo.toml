@@ -25,11 +25,10 @@ tower-http = { version = "0.6", features = ["catch-panic", "fs", "limit", "set-h
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+sqlx = { version = "0.9.0-alpha.1", features = ["runtime-tokio", "sqlite", "migrate", "uuid", "chrono", "derive", "sqlx-toml"] }
 jsonschema = "0.28"
-argon2 = "0.5"
 tower-sessions = "0.14"
-tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite"] }
+allowthem-core = { path = "../allowthem/crates/core" }
 tar = "0.4"
 flate2 = "1.0"
 hex = "0.4"

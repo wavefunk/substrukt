@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use allowthem_core::{AllowThem, AuthClient};
 use dashmap::DashMap;
 use metrics_exporter_prometheus::PrometheusHandle;
 use minijinja_autoreload::AutoReloader;
@@ -34,6 +35,9 @@ pub struct AppStateInner {
     pub backup_running: AtomicBool,
     pub backup_cancel: Option<CancellationToken>,
     pub openapi_cache: OpenApiCache,
+    pub ath: AllowThem,
+    pub auth_client: Arc<dyn AuthClient>,
+    pub has_users: AtomicBool,
 }
 
 pub type AppState = Arc<AppStateInner>;
