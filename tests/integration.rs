@@ -3,8 +3,8 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use reqwest::{Client, StatusCode, redirect};
 use tokio::net::TcpListener;
+use tower_sessions::MemoryStore;
 use tower_sessions::SessionManagerLayer;
-use tower_sessions_sqlx_store::SqliteStore;
 
 use substrukt::cache;
 use substrukt::config::Config;
@@ -38,13 +38,35 @@ impl TestServer {
         config.ensure_app_dirs("default").unwrap();
 
         let pool = db::init_pool(&config.db_path).await.unwrap();
-        let session_store = SqliteStore::new(pool.clone());
-        session_store.migrate().await.unwrap();
+
+        // Recreate app_access with TEXT user_id for allowthem UUIDs
+        sqlx::query("DROP TABLE IF EXISTS app_access").execute(&pool).await.unwrap();
+        sqlx::query("CREATE TABLE app_access (app_id INTEGER NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (app_id, user_id))").execute(&pool).await.unwrap();
+        // Create app_tokens table
+        sqlx::query("CREATE TABLE IF NOT EXISTS app_tokens (api_token_id TEXT NOT NULL, app_id INTEGER NOT NULL, token_hash TEXT NOT NULL, PRIMARY KEY (api_token_id, app_id))").execute(&pool).await.unwrap();
+
+        let session_store = MemoryStore::default();
         let session_layer = SessionManagerLayer::new(session_store).with_secure(false);
 
         let audit_db_path = data_dir.path().join("audit.db");
         let audit_pool = substrukt::audit::init_pool(&audit_db_path).await.unwrap();
         let audit_logger = substrukt::audit::AuditLogger::new(audit_pool);
+
+        // allowthem auth setup
+        let ath = allowthem_core::AllowThemBuilder::with_pool(pool.clone())
+            .cookie_secure(false)
+            .build()
+            .await
+            .unwrap();
+
+        // Bootstrap roles
+        for role_name in ["admin", "editor", "viewer"] {
+            let rn = allowthem_core::RoleName::new(role_name);
+            ath.db().create_role(&rn, None).await.unwrap();
+        }
+
+        let auth_client: std::sync::Arc<dyn allowthem_core::AuthClient> =
+            std::sync::Arc::new(allowthem_core::EmbeddedAuthClient::new(ath.clone(), "/login"));
 
         let reloader = templates::create_reloader();
         let content_cache = DashMap::new();
@@ -71,6 +93,9 @@ impl TestServer {
             backup_running: std::sync::atomic::AtomicBool::new(false),
             backup_cancel: None,
             openapi_cache: std::sync::Arc::new(std::sync::RwLock::new(None)),
+            ath,
+            auth_client,
+            has_users: std::sync::atomic::AtomicBool::new(false),
         });
 
         let app = routes::build_router(state).layer(session_layer);
@@ -254,9 +279,9 @@ async fn auth_setup_creates_admin_and_sets_session() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert_eq!(resp.headers().get("location").unwrap(), "/");
+    assert_eq!(resp.headers().get("location").unwrap(), "/apps");
 
-    // Session should now work -- "/" redirects to /apps
+    // Session should now work -- "/apps" is the landing page
     let resp = s.client.get(s.url("/")).send().await.unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
     assert_eq!(resp.headers().get("location").unwrap(), "/apps");
@@ -309,7 +334,7 @@ async fn auth_login_and_logout() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert_eq!(resp.headers().get("location").unwrap(), "/");
+    assert_eq!(resp.headers().get("location").unwrap(), "/apps");
 }
 
 // ── Schema CRUD tests ────────────────────────────────────────
@@ -729,7 +754,7 @@ async fn token_create_and_list() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let token = s.create_api_token("test-token").await;
-    assert_eq!(token.len(), 64, "Token should be 64-char hex");
+    assert!(token.len() >= 32, "Token should be at least 32 chars, got {}", token.len());
 
     let resp = s
         .client
@@ -1585,9 +1610,9 @@ async fn signup_with_invalid_token_shows_error() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let body = resp.text().await.unwrap();
-    assert!(body.contains("Invalid or expired invitation"));
+    assert!(body.contains("invalid or has expired"));
 }
 
 #[tokio::test]
@@ -1636,11 +1661,9 @@ async fn signup_creates_user_and_logs_in() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert_eq!(resp.headers().get("location").unwrap(), "/");
+    assert_eq!(resp.headers().get("location").unwrap(), "/apps");
 
-    // Should be logged in — / redirects to /apps
-    let resp = client2.get(s.url("/")).send().await.unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    // Should be logged in — /apps is the landing page
     let resp = client2.get(s.url("/apps")).send().await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
@@ -2080,13 +2103,18 @@ fn extract_upload_hash(html: &str) -> Option<String> {
 
 /// Extract the newly created token from the tokens page HTML.
 fn extract_new_token(html: &str) -> Option<String> {
-    // Token is in: <code class="...select-all">HEX_TOKEN</code>
+    // Token is in: <code class="...select-all">TOKEN</code>
+    // allowthem generates base64url tokens (43 chars: alphanumeric + - + _)
     let marker = "select-all\">";
     if let Some(pos) = html.find(marker) {
         let rest = &html[pos + marker.len()..];
         if let Some(end) = rest.find('<') {
             let token = rest[..end].trim();
-            if token.len() == 64 && token.chars().all(|c| c.is_ascii_hexdigit()) {
+            if token.len() >= 32
+                && token
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
                 return Some(token.to_string());
             }
         }

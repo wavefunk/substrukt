@@ -145,6 +145,21 @@ async fn invite_user(
         .await;
     }
 
+    // Check if there's already a pending invitation for this email
+    if let Ok(pending) = state.ath.db().list_pending_invitations().await {
+        if pending.iter().any(|inv| inv.email.as_ref().map(|e| e.as_str()) == Some(form.email.trim())) {
+            return render_users_with_error(
+                &state,
+                &session,
+                is_htmx,
+                "An invitation for this email already exists",
+                &user_role,
+                &current_username,
+            )
+            .await;
+        }
+    }
+
     // Validate role
     let role_str = match form.role.as_str() {
         "admin" | "editor" | "viewer" => &form.role,
@@ -360,8 +375,18 @@ async fn change_password(
         return Ok(axum::response::Redirect::to("/settings/profile"));
     }
 
+    // Fetch the user with password hash (the Extension user has None for security)
+    let username_str = user.username.as_ref().map(|u| u.as_str()).unwrap_or("");
+    let login_user = match state.ath.db().find_for_login(username_str).await {
+        Ok(u) => u,
+        Err(_) => {
+            auth::set_flash(&session, "error", "Current password is incorrect").await;
+            return Ok(axum::response::Redirect::to("/settings/profile"));
+        }
+    };
+
     // Verify current password
-    let hash = match &user.password_hash {
+    let hash = match &login_user.password_hash {
         Some(h) => h,
         None => {
             auth::set_flash(&session, "error", "Current password is incorrect").await;
@@ -379,6 +404,7 @@ async fn change_password(
 
     // Update password via allowthem
     if let Err(e) = state.ath.db().update_user_password(user.id, &form.new_password).await {
+        tracing::error!("Password update failed: {e}");
         auth::set_flash(&session, "error", &format!("Failed to update password: {e}")).await;
         return Ok(axum::response::Redirect::to("/settings/profile"));
     }

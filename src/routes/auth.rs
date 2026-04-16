@@ -239,7 +239,7 @@ async fn setup_submit(
         .into_response();
     }
 
-    let email = match allowthem_core::Email::new(format!("{}@local", form.username)) {
+    let email = match allowthem_core::Email::new(format!("{}@setup.local", form.username)) {
         Ok(e) => e,
         Err(_) => {
             let csrf_token = ensure_csrf_token(&session).await;
@@ -438,8 +438,15 @@ async fn signup_submit(
         let _ = state.ath.db().assign_role(&user.id, &role.id).await;
     }
 
-    // TODO: Task 7 will update grant_app_access to accept &str user_id
-    // Auto-grant access to all apps for non-admins will be wired then
+    // Auto-grant access to all apps for non-admin users
+    if role_str != "admin" {
+        if let Ok(apps) = crate::db::models::list_apps(&state.pool).await {
+            let uid = user.id.to_string();
+            for app in apps {
+                let _ = crate::db::models::grant_app_access(&state.pool, app.id, &uid).await;
+            }
+        }
+    }
 
     state.has_users.store(true, std::sync::atomic::Ordering::Relaxed);
 
