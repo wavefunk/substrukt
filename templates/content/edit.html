@@ -11,6 +11,15 @@
   {% endif %}
 </div>
 
+{% if flash_message %}
+<div class="p-4 rounded mb-4 text-sm border
+  {% if flash_kind == 'success' %}bg-success-soft border-success text-success
+  {% elif flash_kind == 'error' %}bg-danger-soft border-danger text-danger
+  {% else %}bg-card-alt border-border-light text-primary{% endif %}">
+  {{ flash_message }}
+</div>
+{% endif %}
+
 {% if errors %}
 <div class="bg-danger-soft text-danger p-4 rounded mb-4">
   <div class="font-medium mb-1">Validation errors:</div>

@@ -83,15 +83,20 @@ pub async fn migrate_users_to_allowthem(
 
 /// After users are migrated, update schema: recreate app_access with TEXT user_id,
 /// create app_tokens table, drop old auth tables. Idempotent.
+/// Uses a single connection (not the pool) to avoid DDL interleaving across connections.
 pub async fn finalize_schema(
     pool: &SqlitePool,
     id_map: &std::collections::HashMap<i64, String>,
 ) -> eyre::Result<()> {
+    // Use a dedicated connection for DDL to avoid pool-level interleaving
+    let mut conn = pool.acquire().await?;
+
     // Check if migration already done (old users table gone)
-    let old_users_exist: Option<String> =
-        sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-            .fetch_optional(pool)
-            .await?;
+    let old_users_exist: Option<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
 
     if old_users_exist.is_none() {
         return Ok(()); // Already migrated
@@ -99,12 +104,17 @@ pub async fn finalize_schema(
 
     tracing::info!("Finalizing schema migration...");
 
+    // Drop the staging table if left over from a prior failed run
+    sqlx::query("DROP TABLE IF EXISTS app_access_new")
+        .execute(&mut *conn)
+        .await?;
+
     // Recreate app_access with TEXT user_id
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS app_access_new \
+        "CREATE TABLE app_access_new \
          (app_id INTEGER NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (app_id, user_id))",
     )
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     for (old_id, new_id) in id_map {
@@ -114,15 +124,15 @@ pub async fn finalize_schema(
         )
         .bind(new_id)
         .bind(old_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     }
 
     sqlx::query("DROP TABLE IF EXISTS app_access")
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     sqlx::query("ALTER TABLE app_access_new RENAME TO app_access")
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
     // Create app_tokens table
@@ -131,18 +141,18 @@ pub async fn finalize_schema(
          (api_token_id TEXT NOT NULL, app_id INTEGER NOT NULL, token_hash TEXT NOT NULL, \
          PRIMARY KEY (api_token_id, app_id))",
     )
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     // Drop old auth tables
     sqlx::query("DROP TABLE IF EXISTS api_tokens")
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     sqlx::query("DROP TABLE IF EXISTS invitations")
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     sqlx::query("DROP TABLE IF EXISTS users")
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
     tracing::info!("Schema migration complete");

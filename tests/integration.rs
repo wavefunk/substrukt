@@ -3013,7 +3013,8 @@ async fn single_schema_draft_published() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // GET /single (default) returns 404 — draft entry, published-only filter
+    // GET /single (default) returns 200 — single-kind defaults to "all" so entries
+    // are always visible (draft/published filtering doesn't make sense for singletons)
     let resp = api
         .get(s.url("/api/v1/apps/default/content/site-settings/single"))
         .bearer_auth(&token)
@@ -3022,21 +3023,25 @@ async fn single_schema_draft_published() {
         .unwrap();
     assert_eq!(
         resp.status(),
-        StatusCode::NOT_FOUND,
-        "draft single should return 404 by default"
+        StatusCode::OK,
+        "single-kind default should return entry regardless of status"
     );
+    let data: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(data["site_name"], "Test Site");
+    assert!(data.get("_status").is_none(), "_status should be stripped");
 
-    // GET /single?status=all returns the entry
+    // GET /single?status=published returns 404 for draft entry (explicit filter)
     let resp = api
-        .get(s.url("/api/v1/apps/default/content/site-settings/single?status=all"))
+        .get(s.url("/api/v1/apps/default/content/site-settings/single?status=published"))
         .bearer_auth(&token)
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let data: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(data["site_name"], "Test Site");
-    assert!(data.get("_status").is_none(), "_status should be stripped");
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "explicit published filter should return 404 for draft single"
+    );
 
     // Publish the single entry via dedicated endpoint
     let resp = api
@@ -3560,14 +3565,14 @@ async fn api_publish_single_entry() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Default GET returns 404 (draft)
+    // Default GET returns 200 (single-kind defaults to "all")
     let resp = api
         .get(s.url("/api/v1/apps/default/content/single-pub/single"))
         .bearer_auth(&token)
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(resp.status(), StatusCode::OK);
 
     // Publish via dedicated endpoint
     let resp = api
@@ -3914,7 +3919,7 @@ async fn api_upsert_single_with_explicit_status() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // GET /single (default=published) should now return 404
+    // GET /single (default=all for single-kind) should still return 200
     let resp = api
         .get(s.url("/api/v1/apps/default/content/single-status/single"))
         .bearer_auth(&token)
@@ -3923,8 +3928,21 @@ async fn api_upsert_single_with_explicit_status() {
         .unwrap();
     assert_eq!(
         resp.status(),
+        StatusCode::OK,
+        "single-kind default is 'all', so draft entry should still be visible"
+    );
+
+    // GET /single?status=published should return 404 (explicit published filter)
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/single-status/single?status=published"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
         StatusCode::NOT_FOUND,
-        "single set to draft via inline _status should not be visible in default list"
+        "explicit published filter should hide draft single-kind entry"
     );
 }
 

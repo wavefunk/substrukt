@@ -372,6 +372,7 @@ async fn edit_entry_page(
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
 ) -> axum::response::Result<Html<String>> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
+    let flash = auth::take_flash(&session).await;
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let schema_file = schema::get_schema(&schemas_dir, &schema_slug)
@@ -428,6 +429,8 @@ async fn edit_entry_page(
             is_single => is_single,
             form_fields => form_html,
             entry_status => entry_status,
+            flash_kind => flash.as_ref().map(|(k, _)| k.as_str()),
+            flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
     Ok(Html(html))

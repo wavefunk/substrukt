@@ -593,9 +593,11 @@ async fn get_single(
 
     match content::get_entry(&content_dir, &schema_file, "_single") {
         Ok(Some(entry)) => {
-            // Check status filter
+            // Default to "all" for single-kind — unlike collections, singletons should
+            // be visible immediately after upsert. Callers can still pass ?status=published
+            // to explicitly filter.
             let status = if params.status.is_empty() {
-                "published"
+                "all"
             } else {
                 &params.status
             };
