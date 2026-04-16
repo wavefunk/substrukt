@@ -3,6 +3,15 @@
 {% block content %}
 <h1 class="text-2xl font-bold tracking-tight mb-6">Users</h1>
 
+{% if flash_message %}
+<div class="p-4 rounded mb-6 text-sm border
+  {% if flash_kind == 'success' %}bg-success-soft border-success text-success
+  {% elif flash_kind == 'error' %}bg-danger-soft border-danger text-danger
+  {% else %}bg-card-alt border-border-light text-primary{% endif %}">
+  {{ flash_message }}
+</div>
+{% endif %}
+
 {% if invite_url %}
 <div class="bg-success-soft border border-success text-success p-4 rounded mb-6">
   <div class="font-medium mb-1">Invitation created! Share this link with the user:</div>
@@ -29,19 +38,43 @@
         <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Username</th>
         <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Role</th>
         <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Created</th>
+        <th class="px-4 py-2.5"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border-light">
       {% for u in users %}
       <tr class="hover:bg-card-alt">
-        <td class="px-4 py-2.5 font-medium">{{ u.username }}</td>
+        <td class="px-4 py-2.5 font-medium">{{ u.username }}{% if u.username == current_username %} <span class="text-xs text-muted">(you)</span>{% endif %}</td>
         <td class="px-4 py-2.5 text-sm">
+          {% if u.username != current_username %}
+          <form method="post" action="/settings/users/{{ u.id }}/role" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <select name="role" onchange="this.form.submit()" class="px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer
+              {% if u.role == 'admin' %}bg-danger-soft text-danger
+              {% elif u.role == 'editor' %}bg-accent-soft text-accent
+              {% else %}bg-card-alt text-muted{% endif %}">
+              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
+              <option value="editor" {% if u.role == 'editor' %}selected{% endif %}>editor</option>
+              <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>viewer</option>
+            </select>
+          </form>
+          {% else %}
           <span class="px-2 py-0.5 rounded-full text-xs font-medium
             {% if u.role == 'admin' %}bg-danger-soft text-danger
             {% elif u.role == 'editor' %}bg-accent-soft text-accent
             {% else %}bg-card-alt text-muted{% endif %}">{{ u.role }}</span>
+          {% endif %}
         </td>
         <td class="px-4 py-2.5 text-muted text-sm">{{ u.created_at|datefmt }}</td>
+        <td class="px-4 py-2.5 text-right">
+          {% if u.username != current_username %}
+          <form method="post" action="/settings/users/{{ u.id }}/delete" class="inline"
+            onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <button type="submit" class="text-danger hover:text-danger text-sm">Delete</button>
+          </form>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

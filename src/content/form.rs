@@ -525,7 +525,10 @@ fn render_field(
                     let preview_html = if preview.is_empty() {
                         String::new()
                     } else {
-                        format!(r#"<span class="text-xs text-muted truncate max-w-xs">{}</span>"#, escape_html_attr(&preview))
+                        format!(
+                            r#"<span class="text-xs text-muted truncate max-w-xs">{}</span>"#,
+                            escape_html_attr(&preview)
+                        )
                     };
                     items_html.push_str(&format!(
                         r#"<div class="array-item border border-border-light p-3 rounded mb-2" data-index="{i}">
@@ -605,9 +608,7 @@ fn array_item_preview(item: &Value, items_schema: &Value) -> String {
     }
     // For object items, show first 1-2 string property values
     if let Some(obj) = item.as_object() {
-        let props = items_schema
-            .get("properties")
-            .and_then(|p| p.as_object());
+        let props = items_schema.get("properties").and_then(|p| p.as_object());
         let keys: Vec<&String> = if let Some(p) = props {
             p.keys().collect()
         } else {

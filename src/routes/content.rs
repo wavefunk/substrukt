@@ -48,6 +48,18 @@ pub fn routes() -> Router<AppState> {
             "/{schema_slug}/{entry_id}/delete",
             axum::routing::post(delete_entry_post),
         )
+        .route(
+            "/{schema_slug}/_bulk/publish",
+            axum::routing::post(bulk_publish),
+        )
+        .route(
+            "/{schema_slug}/_bulk/unpublish",
+            axum::routing::post(bulk_unpublish),
+        )
+        .route(
+            "/{schema_slug}/_bulk/delete",
+            axum::routing::post(bulk_delete),
+        )
         .route("/{schema_slug}/{entry_id}/history", get(entry_history))
         .route(
             "/{schema_slug}/{entry_id}/revert/{timestamp}",
@@ -1132,6 +1144,160 @@ fn set_nested_field(data: &mut serde_json::Value, path: &str, value: serde_json:
             }
         }
     }
+}
+
+#[derive(serde::Deserialize)]
+struct BulkForm {
+    ids: String,
+}
+
+async fn bulk_publish(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    app: AppContext,
+    Path((_app_slug, schema_slug)): Path<(String, String)>,
+    axum::extract::Form(form): axum::extract::Form<BulkForm>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug))
+            .into_response();
+    }
+    let user_id_str = user.id.to_string();
+    let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
+    let content_dir = state.config.app_content_dir(&app.app.slug);
+    let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
+        Ok(Some(s)) => s,
+        _ => return Redirect::to(&format!("/apps/{}/schemas", app.app.slug)).into_response(),
+    };
+    let mut count = 0;
+    for id in form
+        .ids
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        if content::set_entry_status(&content_dir, &schema_file, id, "published").is_ok() {
+            crate::cache::reload_entry(
+                &state.cache,
+                &state.etag_cache,
+                &content_dir,
+                &schema_file,
+                id,
+                &app.app.slug,
+            );
+            state.audit.log_with_app(
+                &user_id_str,
+                "entry_published",
+                "content",
+                &format!("{schema_slug}/{id}"),
+                None,
+                Some(app.app.id),
+            );
+            count += 1;
+        }
+    }
+    auth::set_flash(&session, "success", &format!("{count} entries published")).await;
+    Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug)).into_response()
+}
+
+async fn bulk_unpublish(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    app: AppContext,
+    Path((_app_slug, schema_slug)): Path<(String, String)>,
+    axum::extract::Form(form): axum::extract::Form<BulkForm>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug))
+            .into_response();
+    }
+    let user_id_str = user.id.to_string();
+    let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
+    let content_dir = state.config.app_content_dir(&app.app.slug);
+    let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
+        Ok(Some(s)) => s,
+        _ => return Redirect::to(&format!("/apps/{}/schemas", app.app.slug)).into_response(),
+    };
+    let mut count = 0;
+    for id in form
+        .ids
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        if content::set_entry_status(&content_dir, &schema_file, id, "draft").is_ok() {
+            crate::cache::reload_entry(
+                &state.cache,
+                &state.etag_cache,
+                &content_dir,
+                &schema_file,
+                id,
+                &app.app.slug,
+            );
+            state.audit.log_with_app(
+                &user_id_str,
+                "entry_unpublished",
+                "content",
+                &format!("{schema_slug}/{id}"),
+                None,
+                Some(app.app.id),
+            );
+            count += 1;
+        }
+    }
+    auth::set_flash(&session, "success", &format!("{count} entries unpublished")).await;
+    Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug)).into_response()
+}
+
+async fn bulk_delete(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    app: AppContext,
+    Path((_app_slug, schema_slug)): Path<(String, String)>,
+    axum::extract::Form(form): axum::extract::Form<BulkForm>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug))
+            .into_response();
+    }
+    let user_id_str = user.id.to_string();
+    let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
+    let content_dir = state.config.app_content_dir(&app.app.slug);
+    let app_dir = state.config.app_dir(&app.app.slug);
+    let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
+        Ok(Some(s)) => s,
+        _ => return Redirect::to(&format!("/apps/{}/schemas", app.app.slug)).into_response(),
+    };
+    let mut count = 0;
+    for id in form
+        .ids
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        let _ = uploads::db_delete_references(&state.pool, app.app.id, &schema_slug, id).await;
+        let _ = content::delete_entry(&content_dir, &schema_file, id);
+        crate::history::delete_history(&app_dir, &schema_slug, id);
+        let key = format!("{}/{schema_slug}/{id}", app.app.slug);
+        state.cache.remove(&key);
+        state.audit.log_with_app(
+            &user_id_str,
+            "content_delete",
+            "content",
+            &format!("{schema_slug}/{id}"),
+            None,
+            Some(app.app.id),
+        );
+        count += 1;
+    }
+    auth::set_flash(&session, "success", &format!("{count} entries deleted")).await;
+    Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug)).into_response()
 }
 
 async fn entry_history(

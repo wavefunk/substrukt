@@ -20,13 +20,37 @@
 
 {% if entries %}
 <div class="bg-card border border-border-light rounded-lg overflow-hidden">
+  {% if user_role != "viewer" %}
+  <div id="bulk-bar" class="hidden mb-3 p-3 bg-card-alt border border-border-light rounded-lg flex items-center gap-3">
+    <span id="bulk-count" class="text-sm font-medium">0 selected</span>
+    <form method="post" id="bulk-publish-form" action="/apps/{{ app.slug }}/content/{{ schema_slug }}/_bulk/publish" hx-boost="false">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="ids" id="bulk-publish-ids">
+      <button type="submit" class="text-sm px-3 py-1 bg-success-soft text-success border border-success rounded hover:bg-success hover:text-white">Publish</button>
+    </form>
+    <form method="post" id="bulk-unpublish-form" action="/apps/{{ app.slug }}/content/{{ schema_slug }}/_bulk/unpublish" hx-boost="false">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="ids" id="bulk-unpublish-ids">
+      <button type="submit" class="text-sm px-3 py-1 bg-accent-soft text-accent border border-accent rounded hover:bg-accent hover:text-black">Unpublish</button>
+    </form>
+    <form method="post" id="bulk-delete-form" action="/apps/{{ app.slug }}/content/{{ schema_slug }}/_bulk/delete" hx-boost="false"
+      onsubmit="return confirm('Delete ' + document.querySelectorAll('.bulk-check:checked').length + ' entries? This cannot be undone.')">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="ids" id="bulk-delete-ids">
+      <button type="submit" class="text-sm px-3 py-1 bg-danger-soft text-danger border border-danger rounded hover:bg-danger hover:text-white">Delete</button>
+    </form>
+  </div>
+  {% endif %}
   <table id="content-table" class="w-full">
     <thead class="bg-card-alt">
       <tr>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable(0)">ID <span class="sort-arrow text-[10px]"></span></th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable(1)">Status <span class="sort-arrow text-[10px]"></span></th>
+        {% if user_role != "viewer" %}
+        <th class="px-4 py-2.5 w-8"><input type="checkbox" id="select-all" onchange="toggleAll(this)" class="rounded border-border"></th>
+        {% endif %}
+        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable({% if user_role != 'viewer' %}1{% else %}0{% endif %})">ID <span class="sort-arrow text-[10px]"></span></th>
+        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable({% if user_role != 'viewer' %}2{% else %}1{% endif %})">Status <span class="sort-arrow text-[10px]"></span></th>
         {% for col in columns %}
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable({{ loop.index0 + 2 }})">{{ col }} <span class="sort-arrow text-[10px]"></span></th>
+        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted cursor-pointer hover:text-primary select-none" onclick="sortTable({{ loop.index0 + (2 if user_role == 'viewer' else 3) }})">{{ col }} <span class="sort-arrow text-[10px]"></span></th>
         {% endfor %}
         <th class="px-4 py-2.5"></th>
       </tr>
@@ -34,6 +58,9 @@
     <tbody class="divide-y divide-border-light">
       {% for entry in entries %}
       <tr class="hover:bg-card-alt">
+        {% if user_role != "viewer" %}
+        <td class="px-4 py-2.5 w-8"><input type="checkbox" class="bulk-check rounded border-border" value="{{ entry.id }}" onchange="updateBulkBar()"></td>
+        {% endif %}
         <td class="px-4 py-2.5 font-mono text-sm text-muted">{{ entry.id }}</td>
         <td class="px-4 py-2.5">
           {% if entry.status == "published" %}
@@ -112,6 +139,28 @@ function sortTable(colIdx) {
   table.querySelectorAll('.sort-arrow').forEach(function(el, i) {
     el.textContent = i === colIdx ? (currentSort.asc ? '▲' : '▼') : '';
   });
+}
+function toggleAll(el) {
+  document.querySelectorAll('.bulk-check').forEach(function(cb) { cb.checked = el.checked; });
+  updateBulkBar();
+}
+function updateBulkBar() {
+  var checked = document.querySelectorAll('.bulk-check:checked');
+  var bar = document.getElementById('bulk-bar');
+  if (!bar) return;
+  if (checked.length > 0) {
+    bar.classList.remove('hidden');
+    document.getElementById('bulk-count').textContent = checked.length + ' selected';
+    var ids = Array.from(checked).map(function(cb) { return cb.value; }).join(',');
+    var pub_ids = document.getElementById('bulk-publish-ids');
+    var unpub_ids = document.getElementById('bulk-unpublish-ids');
+    var del_ids = document.getElementById('bulk-delete-ids');
+    if (pub_ids) pub_ids.value = ids;
+    if (unpub_ids) unpub_ids.value = ids;
+    if (del_ids) del_ids.value = ids;
+  } else {
+    bar.classList.add('hidden');
+  }
 }
 </script>
 {% endblock %}

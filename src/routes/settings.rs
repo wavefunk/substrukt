@@ -27,6 +27,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/users", get(users_page))
         .route("/users/invite", axum::routing::post(invite_user))
+        .route("/users/{id}/role", axum::routing::post(change_user_role))
+        .route("/users/{id}/delete", axum::routing::post(delete_user))
         .route(
             "/users/invitations/{id}/delete",
             axum::routing::post(delete_invitation),
@@ -61,6 +63,7 @@ async fn users_page(
     let users = state.ath.db().list_users().await.unwrap_or_default();
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
+    let flash = auth::take_flash(&session).await;
 
     let inv_data: Vec<minijinja::Value> = invitations
         .iter()
@@ -103,6 +106,8 @@ async fn users_page(
             current_username => current_username,
             invitations => inv_data,
             users => user_data,
+            flash_kind => flash.as_ref().map(|(k, _)| k.as_str()),
+            flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
     Ok(Html(html).into_response())
@@ -509,6 +514,123 @@ async fn delete_invitation(
         .audit
         .log(&user_id_str, "invite_delete", "invitation", &id, None);
     auth::set_flash(&session, "success", "Invitation revoked").await;
+    Ok(Redirect::to("/settings/users").into_response())
+}
+
+#[derive(serde::Deserialize)]
+struct ChangeRoleForm {
+    role: String,
+}
+
+async fn change_user_role(
+    Extension(current_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Form(form): Form<ChangeRoleForm>,
+) -> axum::response::Result<axum::response::Response> {
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            "Insufficient permissions",
+        )
+            .into());
+    }
+    let current_user_id_str = current_user.id.to_string();
+
+    let target_user_id = match uuid::Uuid::parse_str(&id) {
+        Ok(uuid) => allowthem_core::UserId::from_uuid(uuid),
+        Err(_) => {
+            auth::set_flash(&session, "error", "Invalid user ID").await;
+            return Ok(Redirect::to("/settings/users").into_response());
+        }
+    };
+
+    // Prevent self-demotion
+    if target_user_id == current_user.id {
+        auth::set_flash(&session, "error", "Cannot change your own role").await;
+        return Ok(Redirect::to("/settings/users").into_response());
+    }
+
+    // Validate role
+    let new_role = match form.role.as_str() {
+        "admin" | "editor" | "viewer" => &form.role,
+        _ => {
+            auth::set_flash(&session, "error", "Invalid role").await;
+            return Ok(Redirect::to("/settings/users").into_response());
+        }
+    };
+
+    // Remove all existing roles
+    let current_roles = state
+        .ath
+        .db()
+        .get_user_roles(&target_user_id)
+        .await
+        .unwrap_or_default();
+    for r in &current_roles {
+        let _ = state.ath.db().unassign_role(&target_user_id, &r.id).await;
+    }
+
+    // Assign new role
+    let role_name = allowthem_core::RoleName::new(new_role);
+    if let Ok(Some(r)) = state.ath.db().get_role_by_name(&role_name).await {
+        let _ = state.ath.db().assign_role(&target_user_id, &r.id).await;
+    }
+
+    state.audit.log(
+        &current_user_id_str,
+        "user_role_changed",
+        "user",
+        &id,
+        Some(&serde_json::json!({"new_role": new_role}).to_string()),
+    );
+    auth::set_flash(&session, "success", "User role updated").await;
+    Ok(Redirect::to("/settings/users").into_response())
+}
+
+async fn delete_user(
+    Extension(current_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> axum::response::Result<axum::response::Response> {
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            "Insufficient permissions",
+        )
+            .into());
+    }
+    let current_user_id_str = current_user.id.to_string();
+
+    let target_user_id = match uuid::Uuid::parse_str(&id) {
+        Ok(uuid) => allowthem_core::UserId::from_uuid(uuid),
+        Err(_) => {
+            auth::set_flash(&session, "error", "Invalid user ID").await;
+            return Ok(Redirect::to("/settings/users").into_response());
+        }
+    };
+
+    // Prevent self-deletion
+    if target_user_id == current_user.id {
+        auth::set_flash(&session, "error", "Cannot delete your own account").await;
+        return Ok(Redirect::to("/settings/users").into_response());
+    }
+
+    // Delete sessions first, then user
+    let _ = state.ath.db().delete_user_sessions(&target_user_id).await;
+    if let Err(e) = state.ath.db().delete_user(target_user_id).await {
+        auth::set_flash(&session, "error", &format!("Failed to delete user: {e}")).await;
+        return Ok(Redirect::to("/settings/users").into_response());
+    }
+
+    state
+        .audit
+        .log(&current_user_id_str, "user_deleted", "user", &id, None);
+    auth::set_flash(&session, "success", "User deleted").await;
     Ok(Redirect::to("/settings/users").into_response())
 }
 

@@ -1611,7 +1611,10 @@ mod tests {
             .await
             .unwrap();
 
-        let (entries, has_next) = logger.list_audit_log(None, None, None, None, None, 1).await.unwrap();
+        let (entries, has_next) = logger
+            .list_audit_log(None, None, None, None, None, 1)
+            .await
+            .unwrap();
         assert_eq!(entries.len(), 2);
         assert!(!has_next);
         assert_eq!(entries[0].action, "login");
@@ -1682,11 +1685,17 @@ mod tests {
             logger.execute_raw(&query).await.unwrap();
         }
 
-        let (page1, has_next1) = logger.list_audit_log(None, None, None, None, None, 1).await.unwrap();
+        let (page1, has_next1) = logger
+            .list_audit_log(None, None, None, None, None, 1)
+            .await
+            .unwrap();
         assert_eq!(page1.len(), 100);
         assert!(has_next1);
 
-        let (page2, has_next2) = logger.list_audit_log(None, None, None, None, None, 2).await.unwrap();
+        let (page2, has_next2) = logger
+            .list_audit_log(None, None, None, None, None, 2)
+            .await
+            .unwrap();
         assert_eq!(page2.len(), 5);
         assert!(!has_next2);
     }
@@ -1945,7 +1954,10 @@ mod tests {
             .unwrap();
 
         // No filter: returns all
-        let (entries, _) = logger.list_audit_log(None, None, None, None, None, 1).await.unwrap();
+        let (entries, _) = logger
+            .list_audit_log(None, None, None, None, None, 1)
+            .await
+            .unwrap();
         assert_eq!(entries.len(), 3);
 
         // Filter by app_id = 1
