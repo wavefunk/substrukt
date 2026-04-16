@@ -59,4 +59,49 @@
     {% endif %}
   </form>
 </div>
+
+{% if user_role != "viewer" %}
+<script>
+(function() {
+  var form = document.querySelector('form[enctype="multipart/form-data"]');
+  if (!form) return;
+  var dirty = false;
+  var submitting = false;
+
+  // Capture initial form state after all fields are rendered
+  var initialState = new FormData(form);
+  var initialMap = {};
+  for (var pair of initialState.entries()) {
+    // Skip CSRF and file inputs (they serialize as empty File objects)
+    if (pair[0] === '_csrf' || pair[1] instanceof File) continue;
+    initialMap[pair[0]] = (initialMap[pair[0]] || '') + pair[1];
+  }
+
+  function checkDirty() {
+    var current = new FormData(form);
+    var currentMap = {};
+    for (var pair of current.entries()) {
+      if (pair[0] === '_csrf' || pair[1] instanceof File) continue;
+      currentMap[pair[0]] = (currentMap[pair[0]] || '') + pair[1];
+    }
+    // Check for changes
+    var allKeys = new Set([...Object.keys(initialMap), ...Object.keys(currentMap)]);
+    for (var key of allKeys) {
+      if ((initialMap[key] || '') !== (currentMap[key] || '')) return true;
+    }
+    return false;
+  }
+
+  form.addEventListener('input', function() { dirty = true; });
+  form.addEventListener('change', function() { dirty = true; });
+  form.addEventListener('submit', function() { submitting = true; });
+
+  window.addEventListener('beforeunload', function(e) {
+    if (dirty && !submitting && checkDirty()) {
+      e.preventDefault();
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

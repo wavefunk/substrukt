@@ -45,20 +45,54 @@
 
 <div class="bg-card border border-border-light rounded-lg p-6">
   <h2 class="text-lg font-medium mb-2">Import</h2>
-  <p class="text-muted text-sm mb-4">Import a .tar.gz bundle. This will overwrite existing schemas, content, and uploads for this app.</p>
-  <form method="post" action="/apps/{{ app.slug }}/data/import" enctype="multipart/form-data" hx-disable>
+  <p class="text-muted text-sm mb-4">Import a .tar.gz bundle. <span class="text-danger font-medium">This will overwrite existing schemas, content, and uploads for this app.</span></p>
+  <form id="import-form" method="post" action="/apps/{{ app.slug }}/data/import" enctype="multipart/form-data" hx-disable>
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div class="flex gap-3 items-end">
       <input type="file" name="bundle" accept=".tar.gz,.tgz,application/gzip" required
         id="bundle-input"
         onchange="document.getElementById('import-btn').disabled=!this.files.length"
         class="flex-1 text-sm file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-card-alt file:text-primary hover:file:bg-sidebar-hover">
-      <button type="submit" id="import-btn" disabled
+      <button type="button" id="import-btn" disabled
         class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick="return confirm('This will overwrite existing data for this app. Continue?')">
+        onclick="showImportConfirm()">
         Import Bundle
       </button>
     </div>
   </form>
 </div>
+
+<div id="import-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+  <div class="bg-card rounded-lg shadow-xl p-6 w-full max-w-md border border-border-light">
+    <h3 class="text-lg font-bold text-danger mb-2">Confirm Import</h3>
+    <p class="text-sm text-secondary mb-4">This will <strong>permanently overwrite</strong> all schemas, content, and uploads for <strong>{{ app.name }}</strong>. This action cannot be undone.</p>
+    <label for="confirm-app-name" class="block text-sm font-medium text-secondary mb-1">Type <strong>{{ app.slug }}</strong> to confirm:</label>
+    <input type="text" id="confirm-app-name" autocomplete="off" class="w-full px-3 py-2 border border-border rounded-md bg-input-bg focus:outline-none focus:ring-2 focus:ring-danger focus:border-danger mb-4">
+    <div class="flex gap-3 justify-end">
+      <button type="button" onclick="hideImportConfirm()" class="px-4 py-2 rounded-md border border-border text-secondary hover:bg-card-alt text-sm font-medium">Cancel</button>
+      <button type="button" id="confirm-import-btn" disabled onclick="submitImport()" class="bg-danger text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Import and Overwrite</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showImportConfirm() {
+  document.getElementById('import-confirm-modal').classList.remove('hidden');
+  document.getElementById('confirm-app-name').value = '';
+  document.getElementById('confirm-import-btn').disabled = true;
+  document.getElementById('confirm-app-name').focus();
+}
+function hideImportConfirm() {
+  document.getElementById('import-confirm-modal').classList.add('hidden');
+}
+document.getElementById('confirm-app-name').addEventListener('input', function() {
+  document.getElementById('confirm-import-btn').disabled = this.value !== '{{ app.slug }}';
+});
+function submitImport() {
+  document.getElementById('import-form').submit();
+}
+document.getElementById('import-confirm-modal').addEventListener('click', function(e) {
+  if (e.target === this) hideImportConfirm();
+});
+</script>
 {% endblock %}
