@@ -10,7 +10,6 @@ use tower_sessions::MemoryStore;
 use tower_sessions::SessionManagerLayer;
 
 use substrukt::audit;
-use substrukt::auth;
 use substrukt::cache;
 use substrukt::config::Config;
 use substrukt::db;
@@ -157,16 +156,29 @@ async fn main() -> eyre::Result<()> {
         }
         Command::CreateToken { name, app } => {
             let pool = db::init_pool(&config.db_path).await?;
-            let count = models::user_count(&pool).await?;
-            if count == 0 {
+            let ath = allowthem_core::AllowThemBuilder::with_pool(pool.clone())
+                .build()
+                .await
+                .expect("Failed to init allowthem");
+            let users = ath.db().list_users().await.unwrap_or_default();
+            if users.is_empty() {
                 eyre::bail!("No users exist. Run the server and set up an admin user first.");
             }
             let app_record = models::find_app_by_slug(&pool, &app)
                 .await?
                 .ok_or_else(|| eyre::eyre!("App '{app}' not found"))?;
-            let raw_token = auth::token::generate_token();
-            let token_hash = auth::token::hash_token(&raw_token);
-            models::create_api_token(&pool, 1, app_record.id, &name, &token_hash).await?;
+            let first_user = users.into_iter().next().unwrap();
+            let (raw_token, info) = ath
+                .db()
+                .create_api_token(first_user.id, &name, None)
+                .await
+                .map_err(|e| eyre::eyre!("Failed to create token: {e}"))?;
+            // Create app_tokens entry linking token to app
+            use sha2::{Digest, Sha256};
+            let token_hash = hex::encode(Sha256::digest(raw_token.as_bytes()));
+            models::create_app_token(&pool, &info.id.to_string(), app_record.id, &token_hash)
+                .await
+                .map_err(|e| eyre::eyre!("Failed to create app token mapping: {e}"))?;
             println!("Token created: {raw_token}");
             println!("(Save this token — it won't be shown again)");
             Ok(())

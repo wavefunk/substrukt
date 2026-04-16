@@ -195,7 +195,7 @@ fn require_token_app(
     token: &BearerToken,
     app: &ApiAppContext,
 ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    if token.token.app_id != Some(app.app.id) {
+    if token.app_id != Some(app.app.id) {
         Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Token not authorized for this app"})),

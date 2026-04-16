@@ -1,5 +1,5 @@
 use axum::{
-    Form, Router,
+    Extension, Form, Router,
     extract::{Path, State},
     response::{Html, IntoResponse, Redirect},
     routing::get,
@@ -27,6 +27,8 @@ pub fn routes() -> Router<AppState> {
 }
 
 async fn list_schemas(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -51,8 +53,12 @@ async fn list_schemas(
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let tmpl = state
         .templates
         .acquire_env()
@@ -77,15 +83,23 @@ async fn list_schemas(
 }
 
 async fn new_schema_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let default_schema = serde_json::json!({
         "x-substrukt": {
             "title": "",
@@ -125,13 +139,24 @@ pub struct SchemaForm {
 }
 
 async fn create_schema(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(form): Form<SchemaForm>,
 ) -> impl IntoResponse {
-    let user_id = auth::require_role(&session, "admin").await.unwrap_or(0);
+    if !auth::has_min_role(&role.0, "admin") {
+        return (axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
+    }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let schema_value: serde_json::Value = match serde_json::from_str(&form.schema_json) {
         Ok(v) => v,
@@ -144,6 +169,8 @@ async fn create_schema(
                 true,
                 &form.schema_json,
                 &format!("Invalid JSON: {e}"),
+                &user_role,
+                &current_username,
             )
             .await
             .into_response();
@@ -159,6 +186,8 @@ async fn create_schema(
             true,
             &form.schema_json,
             &format!("{e}"),
+            &user_role,
+            &current_username,
         )
         .await
         .into_response();
@@ -180,6 +209,8 @@ async fn create_schema(
                 true,
                 &form.schema_json,
                 "Schema must have a title and slug in x-substrukt",
+                &user_role,
+                &current_username,
             )
             .await
             .into_response();
@@ -195,13 +226,15 @@ async fn create_schema(
             true,
             &form.schema_json,
             &format!("Save error: {e}"),
+            &user_role,
+            &current_username,
         )
         .await
         .into_response();
     }
 
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "schema_create",
         "schema",
         &slug,
@@ -213,16 +246,24 @@ async fn create_schema(
 }
 
 async fn edit_schema_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> axum::response::Result<impl IntoResponse> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let schema = schema::get_schema(&schemas_dir, &slug)
         .map_err(|e| format!("Error: {e}"))?
@@ -252,6 +293,8 @@ async fn edit_schema_page(
 }
 
 async fn update_schema(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -259,7 +302,16 @@ async fn update_schema(
     Path((_app_slug, slug)): Path<(String, String)>,
     Form(form): Form<SchemaForm>,
 ) -> impl IntoResponse {
-    let user_id = auth::require_role(&session, "admin").await.unwrap_or(0);
+    if !auth::has_min_role(&role.0, "admin") {
+        return (axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
+    }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let schema_value: serde_json::Value = match serde_json::from_str(&form.schema_json) {
         Ok(v) => v,
@@ -272,6 +324,8 @@ async fn update_schema(
                 false,
                 &form.schema_json,
                 &format!("Invalid JSON: {e}"),
+                &user_role,
+                &current_username,
             )
             .await
             .into_response();
@@ -287,6 +341,8 @@ async fn update_schema(
             false,
             &form.schema_json,
             &format!("{e}"),
+            &user_role,
+            &current_username,
         )
         .await
         .into_response();
@@ -301,13 +357,15 @@ async fn update_schema(
             false,
             &form.schema_json,
             &format!("Save error: {e}"),
+            &user_role,
+            &current_username,
         )
         .await
         .into_response();
     }
 
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "schema_update",
         "schema",
         &slug,
@@ -319,16 +377,20 @@ async fn update_schema(
 }
 
 async fn delete_schema(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
-    session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let user_id = auth::require_role(&session, "admin").await.unwrap_or(0);
+    if !auth::has_min_role(&role.0, "admin") {
+        return axum::http::StatusCode::FORBIDDEN;
+    }
+    let user_id_str = user.id.to_string();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let _ = schema::delete_schema(&schemas_dir, &slug);
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "schema_delete",
         "schema",
         &slug,
@@ -346,10 +408,10 @@ async fn render_schema_edit(
     is_new: bool,
     schema_json: &str,
     error: &str,
+    user_role: &str,
+    current_username: &str,
 ) -> axum::response::Result<Html<String>> {
     let csrf_token = auth::ensure_csrf_token(session).await;
-    let user_role = auth::current_user_role(session).await.unwrap_or_default();
-    let current_username = auth::current_username(session).await.unwrap_or_default();
     let tmpl = state
         .templates
         .acquire_env()

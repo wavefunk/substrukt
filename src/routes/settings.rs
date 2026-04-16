@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use axum::{
-    Form, Router,
+    Extension, Form, Router,
     extract::State,
     http::HeaderMap,
     response::{Html, IntoResponse, Redirect},
@@ -11,11 +11,17 @@ use axum_htmx::HxRequest;
 use tower_sessions::Session;
 
 use crate::auth;
-use crate::auth::token;
 use crate::backup;
-use crate::db::models;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
+
+/// Extract username string from allowthem User.
+fn username_str(user: &allowthem_core::User) -> String {
+    user.username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default()
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -32,19 +38,18 @@ pub fn routes() -> Router<AppState> {
 }
 
 async fn users_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<axum::response::Response> {
-    let _user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
 
-    let invitations = models::list_pending_invitations(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
-
-    let users = models::list_users(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
+    let invitations = state.ath.db().list_pending_invitations().await.unwrap_or_default();
+    let users = state.ath.db().list_users().await.unwrap_or_default();
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
 
@@ -52,29 +57,28 @@ async fn users_page(
         .iter()
         .map(|i| {
             minijinja::context! {
-                id => i.id,
-                email => i.email,
-                role => i.role,
-                created_at => i.created_at,
-                expires_at => i.expires_at,
+                id => i.id.to_string(),
+                email => i.email.as_ref().map(|e: &allowthem_core::Email| e.as_str().to_string()).unwrap_or_default(),
+                role => i.metadata.as_deref().unwrap_or("editor"),
+                created_at => i.created_at.to_string(),
+                expires_at => i.expires_at.to_string(),
             }
         })
         .collect();
 
-    let user_data: Vec<minijinja::Value> = users
-        .iter()
-        .map(|u| {
-            minijinja::context! {
-                id => u.id,
-                username => u.username,
-                role => u.role,
-                created_at => u.created_at,
-            }
-        })
-        .collect();
+    let mut user_data: Vec<minijinja::Value> = Vec::new();
+    for u in &users {
+        let u_role = crate::auth::resolve_user_role(&state, &u.id).await;
+        user_data.push(minijinja::context! {
+            id => u.id.to_string(),
+            username => u.username.as_ref().map(|un| un.as_str().to_string()).unwrap_or_else(|| u.email.as_str().to_string()),
+            role => u_role,
+            created_at => u.created_at.to_string(),
+        });
+    }
 
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let tmpl = state
         .templates
         .acquire_env()
@@ -102,64 +106,74 @@ pub struct InviteForm {
 }
 
 async fn invite_user(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     headers: HeaderMap,
     State(state): State<AppState>,
     session: Session,
     Form(form): Form<InviteForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
 
     // Basic email validation
     if !form.email.contains('@') || form.email.len() < 3 {
-        return render_users_with_error(&state, &session, is_htmx, "Invalid email address").await;
+        return render_users_with_error(&state, &session, is_htmx, "Invalid email address", &user_role, &current_username).await;
     }
 
     // Check if email already has an account
-    if let Ok(Some(_)) = models::find_user_by_email(&state.pool, &form.email).await {
+    let email = match allowthem_core::Email::new(form.email.clone()) {
+        Ok(e) => e,
+        Err(_) => {
+            return render_users_with_error(&state, &session, is_htmx, "Invalid email address", &user_role, &current_username).await;
+        }
+    };
+    if state.ath.db().get_user_by_email(&email).await.is_ok() {
         return render_users_with_error(
             &state,
             &session,
             is_htmx,
             "A user with this email already exists",
-        )
-        .await;
-    }
-
-    // Check if already invited
-    if let Ok(Some(_)) = models::find_invitation_by_email(&state.pool, &form.email).await {
-        return render_users_with_error(
-            &state,
-            &session,
-            is_htmx,
-            "An invitation for this email already exists",
+            &user_role,
+            &current_username,
         )
         .await;
     }
 
     // Validate role
-    let role = match form.role.as_str() {
+    let role_str = match form.role.as_str() {
         "admin" | "editor" | "viewer" => &form.role,
-        _ => return render_users_with_error(&state, &session, is_htmx, "Invalid role").await,
+        _ => return render_users_with_error(&state, &session, is_htmx, "Invalid role", &user_role, &current_username).await,
     };
 
-    let raw_token = token::generate_token();
-    let token_hash = token::hash_token(&raw_token);
-    let expires_at = (chrono::Utc::now() + chrono::Duration::days(7)).to_rfc3339();
-
-    let invitation = models::create_invitation(
-        &state.pool,
-        &form.email,
-        &token_hash,
-        user_id,
-        &expires_at,
-        role,
-    )
-    .await
-    .map_err(|e| format!("DB error: {e}"))?;
+    // Create invitation via allowthem
+    let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+    let (raw_token, invitation) = match state.ath.db().create_invitation(
+        Some(&email),
+        Some(role_str),
+        Some(user.id),
+        expires_at,
+    ).await {
+        Ok(inv) => inv,
+        Err(e) => {
+            return render_users_with_error(
+                &state,
+                &session,
+                is_htmx,
+                &format!("Failed to create invitation: {e}"),
+                &user_role,
+                &current_username,
+            ).await;
+        }
+    };
 
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "invite_create",
         "invitation",
         &invitation.id.to_string(),
@@ -173,42 +187,35 @@ async fn invite_user(
     let scheme = if state.config.secure_cookies { "https" } else { "http" };
     let invite_url = format!("{scheme}://{host}/signup?token={raw_token}");
 
-    let invitations = models::list_pending_invitations(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
-
-    let users = models::list_users(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
+    // Re-fetch lists for display
+    let invitations = state.ath.db().list_pending_invitations().await.unwrap_or_default();
+    let users = state.ath.db().list_users().await.unwrap_or_default();
 
     let inv_data: Vec<minijinja::Value> = invitations
         .iter()
         .map(|i| {
             minijinja::context! {
-                id => i.id,
-                email => i.email,
-                role => i.role,
-                created_at => i.created_at,
-                expires_at => i.expires_at,
+                id => i.id.to_string(),
+                email => i.email.as_ref().map(|e: &allowthem_core::Email| e.as_str().to_string()).unwrap_or_default(),
+                role => i.metadata.as_deref().unwrap_or("editor"),
+                created_at => i.created_at.to_string(),
+                expires_at => i.expires_at.to_string(),
             }
         })
         .collect();
 
-    let user_data: Vec<minijinja::Value> = users
-        .iter()
-        .map(|u| {
-            minijinja::context! {
-                id => u.id,
-                username => u.username,
-                role => u.role,
-                created_at => u.created_at,
-            }
-        })
-        .collect();
+    let mut user_data_list: Vec<minijinja::Value> = Vec::new();
+    for u in &users {
+        let u_role = crate::auth::resolve_user_role(&state, &u.id).await;
+        user_data_list.push(minijinja::context! {
+            id => u.id.to_string(),
+            username => u.username.as_ref().map(|un| un.as_str().to_string()).unwrap_or_else(|| u.email.as_str().to_string()),
+            role => u_role,
+            created_at => u.created_at.to_string(),
+        });
+    }
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
     let tmpl = state
         .templates
         .acquire_env()
@@ -223,7 +230,7 @@ async fn invite_user(
             user_role => user_role,
             current_username => current_username,
             invitations => inv_data,
-            users => user_data,
+            users => user_data_list,
             invite_url => invite_url,
         })
         .map_err(|e| format!("Render error: {e}"))?;
@@ -235,43 +242,37 @@ async fn render_users_with_error(
     session: &Session,
     is_htmx: bool,
     error: &str,
+    user_role: &str,
+    current_username: &str,
 ) -> axum::response::Result<axum::response::Response> {
-    let invitations = models::list_pending_invitations(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
-
-    let users = models::list_users(&state.pool)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
+    let invitations = state.ath.db().list_pending_invitations().await.unwrap_or_default();
+    let users = state.ath.db().list_users().await.unwrap_or_default();
 
     let inv_data: Vec<minijinja::Value> = invitations
         .iter()
         .map(|i| {
             minijinja::context! {
-                id => i.id,
-                email => i.email,
-                role => i.role,
-                created_at => i.created_at,
-                expires_at => i.expires_at,
+                id => i.id.to_string(),
+                email => i.email.as_ref().map(|e: &allowthem_core::Email| e.as_str().to_string()).unwrap_or_default(),
+                role => i.metadata.as_deref().unwrap_or("editor"),
+                created_at => i.created_at.to_string(),
+                expires_at => i.expires_at.to_string(),
             }
         })
         .collect();
 
-    let user_data: Vec<minijinja::Value> = users
-        .iter()
-        .map(|u| {
-            minijinja::context! {
-                id => u.id,
-                username => u.username,
-                role => u.role,
-                created_at => u.created_at,
-            }
-        })
-        .collect();
+    let mut user_data: Vec<minijinja::Value> = Vec::new();
+    for u in &users {
+        let u_role = crate::auth::resolve_user_role(state, &u.id).await;
+        user_data.push(minijinja::context! {
+            id => u.id.to_string(),
+            username => u.username.as_ref().map(|un| un.as_str().to_string()).unwrap_or_else(|| u.email.as_str().to_string()),
+            role => u_role,
+            created_at => u.created_at.to_string(),
+        });
+    }
 
     let csrf_token = auth::ensure_csrf_token(session).await;
-    let user_role = auth::current_user_role(session).await.unwrap_or_default();
-    let current_username = auth::current_username(session).await.unwrap_or_default();
     let tmpl = state
         .templates
         .acquire_env()
@@ -294,26 +295,19 @@ async fn render_users_with_error(
 }
 
 async fn profile_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::current_user_id(&session)
-        .await
-        .ok_or("Not authenticated")?;
-
-    let user = models::find_user_by_id(&state.pool, user_id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-        .ok_or("User not found")?;
-
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let (flash_kind, flash_message) = match auth::take_flash(&session).await {
         Some((kind, msg)) => (kind, msg),
         None => (String::new(), String::new()),
     };
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
 
     let tmpl = state
         .templates
@@ -328,7 +322,7 @@ async fn profile_page(
             csrf_token => csrf_token,
             user_role => user_role,
             current_username => current_username,
-            username => user.username,
+            username => current_username,
             flash_kind => flash_kind,
             flash_message => flash_message,
         })
@@ -344,14 +338,11 @@ struct ChangePasswordForm {
 }
 
 async fn change_password(
+    Extension(user): Extension<allowthem_core::User>,
     State(state): State<AppState>,
     session: Session,
     Form(form): Form<ChangePasswordForm>,
 ) -> axum::response::Result<axum::response::Redirect> {
-    let user_id = auth::current_user_id(&session)
-        .await
-        .ok_or("Not authenticated")?;
-
     // Validate new password length
     if form.new_password.len() < 8 {
         auth::set_flash(
@@ -370,26 +361,34 @@ async fn change_password(
     }
 
     // Verify current password
-    let user = models::find_user_by_id(&state.pool, user_id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-        .ok_or("User not found")?;
+    let hash = match &user.password_hash {
+        Some(h) => h,
+        None => {
+            auth::set_flash(&session, "error", "Current password is incorrect").await;
+            return Ok(axum::response::Redirect::to("/settings/profile"));
+        }
+    };
 
-    if !user.verify_password(&form.current_password) {
-        auth::set_flash(&session, "error", "Current password is incorrect").await;
+    match allowthem_core::password::verify_password(&form.current_password, hash) {
+        Ok(true) => {}
+        _ => {
+            auth::set_flash(&session, "error", "Current password is incorrect").await;
+            return Ok(axum::response::Redirect::to("/settings/profile"));
+        }
+    }
+
+    // Update password via allowthem
+    if let Err(e) = state.ath.db().update_user_password(user.id, &form.new_password).await {
+        auth::set_flash(&session, "error", &format!("Failed to update password: {e}")).await;
         return Ok(axum::response::Redirect::to("/settings/profile"));
     }
 
-    // Update password
-    models::update_user_password(&state.pool, user_id, &form.new_password)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
-
+    let user_id_str = user.id.to_string();
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "password_changed",
         "user",
-        &user_id.to_string(),
+        &user_id_str,
         None,
     );
 
@@ -398,18 +397,26 @@ async fn change_password(
 }
 
 async fn delete_invitation(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
-    axum::extract::Path(id): axum::extract::Path<i64>,
+    axum::extract::Path(id): axum::extract::Path<String>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
-    let _ = models::delete_invitation(&state.pool, id).await;
+    if let Ok(uuid) = uuid::Uuid::parse_str(&id) {
+        let inv_id = allowthem_core::InvitationId::from_uuid(uuid);
+        let _ = state.ath.db().delete_invitation(inv_id).await;
+    }
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "invite_delete",
         "invitation",
-        &id.to_string(),
+        &id,
         None,
     );
     auth::set_flash(&session, "success", "Invitation revoked").await;
@@ -427,12 +434,16 @@ pub struct AuditLogFilter {
 }
 
 async fn audit_log_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     axum::extract::Query(filter): axum::extract::Query<AuditLogFilter>,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
 
     let page: u32 = filter.page.parse().unwrap_or(1).max(1);
 
@@ -460,9 +471,19 @@ async fn audit_log_page(
         .map_err(|e| format!("DB error: {e}"))?;
 
     // Build a map from user ID (string) -> username for display
-    let username_map = models::get_username_map(&state.pool)
-        .await
-        .unwrap_or_default();
+    let all_users = state.ath.db().list_users().await.unwrap_or_default();
+    let username_map: std::collections::HashMap<String, String> = all_users
+        .iter()
+        .map(|u| {
+            let uid = u.id.to_string();
+            let uname = u
+                .username
+                .as_ref()
+                .map(|un| un.as_str().to_string())
+                .unwrap_or_else(|| u.email.as_str().to_string());
+            (uid, uname)
+        })
+        .collect();
 
     let resolve_actor = |actor: &str| -> String {
         username_map
@@ -511,8 +532,8 @@ async fn audit_log_page(
     };
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let tmpl = state
         .templates
         .acquire_env()
@@ -542,11 +563,15 @@ async fn audit_log_page(
 // -- Backups --
 
 async fn backups_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
 
     let config = state
         .audit
@@ -632,8 +657,8 @@ async fn backups_page(
     };
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
 
     let latest_ctx = latest_backup.as_ref().map(|b| {
         minijinja::context! {
@@ -697,11 +722,16 @@ struct BackupConfigForm {
 }
 
 async fn update_backup_config(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     Form(form): Form<BackupConfigForm>,
 ) -> axum::response::Result<Redirect> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
     // Validate
     let valid_frequencies = [1, 6, 12, 24, 48, 168];
@@ -723,7 +753,7 @@ async fn update_backup_config(
         .map_err(|e| format!("DB error: {e}"))?;
 
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "backup_config_changed",
         "backup_config",
         "1",
@@ -742,10 +772,15 @@ async fn update_backup_config(
 }
 
 async fn trigger_backup(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<Redirect> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
     if state.s3_config.is_none() {
         auth::set_flash(&session, "error", "S3 not configured").await;
@@ -768,7 +803,7 @@ async fn trigger_backup(
     }
 
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "backup_triggered",
         "backup",
         "",

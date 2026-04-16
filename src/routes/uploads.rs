@@ -1,5 +1,5 @@
 use axum::{
-    Router,
+    Extension, Router,
     body::Body,
     extract::{Multipart, Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
@@ -52,6 +52,8 @@ struct SchemaOption {
 }
 
 async fn list_uploads(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -190,8 +192,12 @@ async fn list_uploads(
         })
         .collect();
 
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let env = state
         .templates
         .acquire_env()
@@ -228,12 +234,14 @@ fn format_size(bytes: u64) -> String {
 }
 
 async fn upload_file(
+    Extension(_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
-    session: Session,
+    _session: Session,
     app: AppContext,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Insufficient permissions"})),

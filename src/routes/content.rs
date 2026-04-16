@@ -1,5 +1,5 @@
 use axum::{
-    Router,
+    Extension, Router,
     extract::{Multipart, Path, Query, State},
     response::{Html, IntoResponse, Redirect},
     routing::get,
@@ -51,7 +51,17 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
+/// Extract username string from allowthem User.
+fn username_str(user: &allowthem_core::User) -> String {
+    user.username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default()
+}
+
 async fn list_entries(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -124,8 +134,8 @@ async fn list_entries(
 
     let column_headers: Vec<&str> = columns.iter().map(|(_, label)| label.as_str()).collect();
 
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
     let tmpl = state
         .templates
@@ -288,16 +298,20 @@ fn warn_dangling_references(
 }
 
 async fn new_entry_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug)): Path<(String, String)>,
 ) -> axum::response::Result<axum::response::Response> {
-    auth::require_role(&session, "editor").await?;
+    if !auth::has_min_role(&role.0, "editor") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let schema_file = schema::get_schema(&schemas_dir, &schema_slug)
         .map_err(|e| format!("Error: {e}"))?
@@ -345,6 +359,8 @@ async fn new_entry_page(
 }
 
 async fn edit_entry_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -383,8 +399,8 @@ async fn edit_entry_page(
         &app.app.slug,
     );
 
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let tmpl = state
         .templates
         .acquire_env()
@@ -414,6 +430,8 @@ async fn edit_entry_page(
 }
 
 async fn create_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -421,13 +439,16 @@ async fn create_entry(
     Path((_app_slug, schema_slug)): Path<(String, String)>,
     multipart: Multipart,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "Insufficient permissions",
         )
             .into_response();
     }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
@@ -473,8 +494,6 @@ async fn create_entry(
     // Validate
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-        let current_username = auth::current_username(&session).await.unwrap_or_default();
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
         let form_html = content_form::render_form_fields(
@@ -520,9 +539,8 @@ async fn create_entry(
             let _ =
                 uploads::db_update_references(&state.pool, app.app.id, &schema_slug, &id, &hashes)
                     .await;
-            let user_id = auth::current_user_id(&session).await.unwrap_or(0);
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "content_create",
                 "content",
                 &format!("{schema_slug}/{id}"),
@@ -541,6 +559,8 @@ async fn create_entry(
 }
 
 async fn update_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -548,13 +568,16 @@ async fn update_entry(
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
     multipart: Multipart,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "Insufficient permissions",
         )
             .into_response();
     }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let app_dir = state.config.app_dir(&app.app.slug);
@@ -594,8 +617,6 @@ async fn update_entry(
 
     if let Err(errors) = content::validate_content(&schema_file, &data) {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-        let current_username = auth::current_username(&session).await.unwrap_or_default();
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
         let form_html = content_form::render_form_fields(
@@ -663,9 +684,8 @@ async fn update_entry(
                 &hashes,
             )
             .await;
-            let user_id = auth::current_user_id(&session).await.unwrap_or(0);
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "content_update",
                 "content",
                 &format!("{schema_slug}/{entry_id}"),
@@ -692,14 +712,17 @@ async fn update_entry(
 }
 
 async fn delete_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return axum::http::StatusCode::FORBIDDEN;
     }
+    let user_id_str = user.id.to_string();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let app_dir = state.config.app_dir(&app.app.slug);
@@ -714,9 +737,8 @@ async fn delete_entry(
     let key = format!("{}/{schema_slug}/{entry_id}", app.app.slug);
     state.cache.remove(&key);
 
-    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "content_delete",
         "content",
         &format!("{schema_slug}/{entry_id}"),
@@ -729,6 +751,8 @@ async fn delete_entry(
 }
 
 async fn delete_entry_post(
+    user_ext: Extension<allowthem_core::User>,
+    role_ext: Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
@@ -736,6 +760,8 @@ async fn delete_entry_post(
 ) -> impl IntoResponse {
     let redirect_url = format!("/apps/{app_slug}/content/{schema_slug}");
     delete_entry(
+        user_ext,
+        role_ext,
         State(state),
         session,
         app,
@@ -746,19 +772,24 @@ async fn delete_entry_post(
 }
 
 async fn publish_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "Insufficient permissions",
         )
             .into_response();
     }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
@@ -788,9 +819,8 @@ async fn publish_entry(
         &app.app.slug,
     );
 
-    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "entry_published",
         "content",
         &format!("{schema_slug}/{entry_id}"),
@@ -800,8 +830,6 @@ async fn publish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-        let current_username = auth::current_username(&session).await.unwrap_or_default();
         let tmpl = state
             .templates
             .acquire_env()
@@ -835,19 +863,24 @@ async fn publish_entry(
 }
 
 async fn unpublish_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "Insufficient permissions",
         )
             .into_response();
     }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let schema_file = match schema::get_schema(&schemas_dir, &schema_slug) {
@@ -877,9 +910,8 @@ async fn unpublish_entry(
         &app.app.slug,
     );
 
-    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "entry_unpublished",
         "content",
         &format!("{schema_slug}/{entry_id}"),
@@ -889,8 +921,6 @@ async fn unpublish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-        let current_username = auth::current_username(&session).await.unwrap_or_default();
         let tmpl = state
             .templates
             .acquire_env()
@@ -1022,6 +1052,8 @@ fn set_nested_field(data: &mut serde_json::Value, path: &str, value: serde_json:
 }
 
 async fn entry_history(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -1052,8 +1084,8 @@ async fn entry_history(
         })
         .collect();
 
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let tmpl = state
         .templates
         .acquire_env()
@@ -1079,19 +1111,22 @@ async fn entry_history(
 }
 
 async fn revert_entry(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug, entry_id, timestamp)): Path<(String, String, String, u64)>,
     axum::extract::Form(form): axum::extract::Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if auth::require_role(&session, "editor").await.is_err() {
+    if !auth::has_min_role(&role.0, "editor") {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "Insufficient permissions",
         )
             .into_response();
     }
+    let user_id_str = user.id.to_string();
     // Verify CSRF
     let csrf_value = form.get("_csrf").map(|s| s.as_str());
     if !matches!(csrf_value, Some(token) if auth::verify_csrf_token(&session, token).await) {
@@ -1145,9 +1180,8 @@ async fn revert_entry(
                 &entry_id,
                 &app.app.slug,
             );
-            let user_id = auth::current_user_id(&session).await.unwrap_or(0);
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "content_update",
                 "content",
                 &format!("{schema_slug}/{entry_id}"),

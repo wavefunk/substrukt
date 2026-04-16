@@ -1,5 +1,5 @@
 use axum::{
-    Form, Router,
+    Extension, Form, Router,
     extract::{Path, State},
     response::{Html, IntoResponse, Redirect},
     routing::get,
@@ -43,15 +43,23 @@ struct DeploymentForm {
 }
 
 async fn list_deployments(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<axum::response::Response> {
-    auth::require_role(&session, "editor").await?;
+    if !auth::has_min_role(&role.0, "editor") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
     let flash = auth::take_flash(&session).await;
 
     let deployments = state
@@ -143,15 +151,23 @@ async fn list_deployments(
 }
 
 async fn new_deployment_form(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
 
     let tmpl = state
         .templates
@@ -175,13 +191,24 @@ async fn new_deployment_form(
 }
 
 async fn create_deployment(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(form): Form<DeploymentForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
 
     let name = form.name.trim();
     let slug = form.slug.trim();
@@ -195,16 +222,24 @@ async fn create_deployment(
             is_htmx,
             "Name and Webhook URL are required",
             None,
+            &user_role,
+            &current_username,
         )
         .await;
     }
 
     if let Err(e) = validate_deployment_slug(slug) {
-        return render_form_with_error(&state, &app, &session, is_htmx, &e, None).await;
+        return render_form_with_error(
+            &state, &app, &session, is_htmx, &e, None, &user_role, &current_username,
+        )
+        .await;
     }
 
     if let Err(e) = validate_webhook_url(webhook_url, state.config.allow_private_webhooks) {
-        return render_form_with_error(&state, &app, &session, is_htmx, &e, None).await;
+        return render_form_with_error(
+            &state, &app, &session, is_htmx, &e, None, &user_role, &current_username,
+        )
+        .await;
     }
 
     let auth_token = if form.webhook_auth_token.trim().is_empty() {
@@ -233,7 +268,7 @@ async fn create_deployment(
     {
         Ok(dep) => {
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "deployment_create",
                 "deployment",
                 &dep.slug,
@@ -257,22 +292,33 @@ async fn create_deployment(
             } else {
                 e.to_string()
             };
-            render_form_with_error(&state, &app, &session, is_htmx, &msg, None).await
+            render_form_with_error(
+                &state, &app, &session, is_htmx, &msg, None, &user_role, &current_username,
+            )
+            .await
         }
     }
 }
 
 async fn edit_deployment_form(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> axum::response::Result<axum::response::Response> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
 
     let dep = state
         .audit
@@ -322,6 +368,8 @@ async fn edit_deployment_form(
 }
 
 async fn update_deployment(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
@@ -329,7 +377,16 @@ async fn update_deployment(
     Path((_app_slug, slug)): Path<(String, String)>,
     Form(form): Form<DeploymentForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
+    let user_role = role.0.clone();
+    let current_username = user
+        .username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default();
 
     let dep = state
         .audit
@@ -357,16 +414,24 @@ async fn update_deployment(
             is_htmx,
             "Name and Webhook URL are required",
             Some(&dep),
+            &user_role,
+            &current_username,
         )
         .await;
     }
 
     if let Err(e) = validate_deployment_slug(new_slug) {
-        return render_form_with_error(&state, &app, &session, is_htmx, &e, Some(&dep)).await;
+        return render_form_with_error(
+            &state, &app, &session, is_htmx, &e, Some(&dep), &user_role, &current_username,
+        )
+        .await;
     }
 
     if let Err(e) = validate_webhook_url(webhook_url, state.config.allow_private_webhooks) {
-        return render_form_with_error(&state, &app, &session, is_htmx, &e, Some(&dep)).await;
+        return render_form_with_error(
+            &state, &app, &session, is_htmx, &e, Some(&dep), &user_role, &current_username,
+        )
+        .await;
     }
 
     // Handle auth token: keep, clear, or update
@@ -405,11 +470,14 @@ async fn update_deployment(
         } else {
             e.to_string()
         };
-        return render_form_with_error(&state, &app, &session, is_htmx, &msg, Some(&dep)).await;
+        return render_form_with_error(
+            &state, &app, &session, is_htmx, &msg, Some(&dep), &user_role, &current_username,
+        )
+        .await;
     }
 
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "deployment_updated",
         "deployment",
         new_slug,
@@ -433,12 +501,17 @@ async fn update_deployment(
 }
 
 async fn delete_deployment(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
     let dep = state
         .audit
@@ -462,7 +535,7 @@ async fn delete_deployment(
         .map_err(|e| format!("DB error: {e}"))?;
 
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "deployment_delete",
         "deployment",
         &dep.slug,
@@ -480,12 +553,17 @@ async fn delete_deployment(
 }
 
 async fn fire_deployment(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "editor").await?;
+    if !auth::has_min_role(&role.0, "editor") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
     let dep = state
         .audit
@@ -512,7 +590,7 @@ async fn fire_deployment(
     {
         Ok(_) => {
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "deployment_fired",
                 "deployment",
                 &dep.slug,
@@ -529,7 +607,7 @@ async fn fire_deployment(
         Err(e) => {
             tracing::warn!("Webhook failed for deployment {}: {e}", dep.slug);
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "deployment_fired",
                 "deployment",
                 &dep.slug,
@@ -555,10 +633,10 @@ async fn render_form_with_error(
     is_htmx: bool,
     error: &str,
     dep: Option<&crate::audit::Deployment>,
+    user_role: &str,
+    current_username: &str,
 ) -> axum::response::Result<axum::response::Response> {
     let csrf_token = auth::ensure_csrf_token(session).await;
-    let user_role = auth::current_user_role(session).await.unwrap_or_default();
-    let current_username = auth::current_username(session).await.unwrap_or_default();
 
     let tmpl = state
         .templates

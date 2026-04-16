@@ -17,9 +17,8 @@ use axum::{
 };
 use axum_htmx::HxRequest;
 use tower_http::catch_panic::CatchPanicLayer;
-use tower_sessions::Session;
 
-use crate::auth::{current_user_id, require_auth, verify_csrf};
+use crate::auth::{require_auth, verify_csrf};
 use crate::metrics;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
@@ -97,7 +96,6 @@ fn handle_panic(_err: Box<dyn std::any::Any + Send + 'static>) -> axum::response
 async fn not_found(
     OriginalUri(uri): OriginalUri,
     HxRequest(is_htmx): HxRequest,
-    session: Session,
     State(state): State<AppState>,
 ) -> Response {
     // API routes get a plain 404 — no redirect, no HTML layout.
@@ -105,28 +103,9 @@ async fn not_found(
         return (axum::http::StatusCode::NOT_FOUND, "Not found").into_response();
     }
 
-    // If user is not authenticated, redirect to login instead of showing
-    // the full app layout with sidebar navigation.
-    if current_user_id(&session).await.is_none() {
-        return Redirect::to("/login").into_response();
-    }
-
-    let user_role = crate::auth::current_user_role(&session)
-        .await
-        .unwrap_or_default();
-    let current_username = crate::auth::current_username(&session)
-        .await
-        .unwrap_or_default();
-    let csrf_token = crate::auth::ensure_csrf_token(&session).await;
-    let html = render_error_with_nav(
-        &state,
-        404,
-        "Page not found",
-        is_htmx,
-        &user_role,
-        &current_username,
-        &csrf_token,
-    );
+    // The fallback handler runs outside the require_auth middleware, so
+    // user extensions may not be set. Render a simple 404 without nav.
+    let html = render_error(&state, 404, "Page not found", is_htmx);
     (axum::http::StatusCode::NOT_FOUND, Html(html)).into_response()
 }
 

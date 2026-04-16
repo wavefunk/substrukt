@@ -88,6 +88,20 @@ pub fn require_role(
     }
 }
 
+/// Check if a role string meets a minimum role level.
+/// Role hierarchy: admin > editor > viewer.
+pub fn has_min_role(role: &str, min_role: &str) -> bool {
+    let level = |r: &str| -> u8 {
+        match r {
+            "admin" => 3,
+            "editor" => 2,
+            "viewer" => 1,
+            _ => 0,
+        }
+    };
+    level(role) >= level(min_role)
+}
+
 // --- Flash / CSRF (unchanged, still use tower-sessions) ---
 
 /// Store a flash message in the session. It will be consumed on next page load.

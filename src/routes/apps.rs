@@ -1,5 +1,5 @@
 use axum::{
-    Form, Router,
+    Extension, Form, Router,
     extract::State,
     response::{Html, IntoResponse, Redirect},
     routing::get,
@@ -12,6 +12,14 @@ use crate::auth;
 use crate::db::models;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
+
+/// Extract username string from allowthem User.
+fn username_str(user: &allowthem_core::User) -> String {
+    user.username
+        .as_ref()
+        .map(|u| u.as_str().to_string())
+        .unwrap_or_default()
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -40,13 +48,14 @@ pub fn routes() -> Router<AppState> {
 }
 
 async fn list_apps(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<Html<String>> {
-    let user_id = auth::current_user_id(&session).await.unwrap_or(0);
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = role.0.clone();
+    let current_username = username_str(&user);
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
 
@@ -55,7 +64,7 @@ async fn list_apps(
             .await
             .map_err(|e| format!("DB error: {e}"))?
     } else {
-        models::list_apps_for_user(&state.pool, user_id)
+        models::list_apps_for_user(&state.pool, &user.id.to_string())
             .await
             .map_err(|e| format!("DB error: {e}"))?
     };
@@ -98,14 +107,18 @@ async fn list_apps(
 }
 
 async fn new_app_form(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
 
     let tmpl = state
         .templates
@@ -132,11 +145,16 @@ struct CreateAppForm {
 }
 
 async fn create_app(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     Form(form): Form<CreateAppForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
     let slug = form.slug.trim().to_lowercase();
     let name = form.name.trim();
 
@@ -156,7 +174,7 @@ async fn create_app(
                 tracing::error!("Failed to create app dirs: {e}");
             }
             state.audit.log(
-                &user_id.to_string(),
+                &user_id_str,
                 "app_create",
                 "app",
                 &app.slug,
@@ -178,47 +196,68 @@ async fn create_app(
 }
 
 async fn app_settings(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
 
-    let users = models::list_app_users(&state.pool, app.app.id)
+    // Build user list from allowthem users with app access info
+    let all_users = state.ath.db().list_users().await.unwrap_or_default();
+    let mut user_data: Vec<minijinja::Value> = Vec::new();
+    for u in &all_users {
+        let uid_str = u.id.to_string();
+        let has_access = models::user_has_app_access(&state.pool, app.app.id, &uid_str)
+            .await
+            .unwrap_or(false);
+        // Resolve role for this user
+        let u_role = crate::auth::resolve_user_role(&state, &u.id).await;
+        user_data.push(minijinja::context! {
+            id => uid_str,
+            username => u.username.as_ref().map(|un| un.as_str().to_string()).unwrap_or_else(|| u.email.as_str().to_string()),
+            role => u_role,
+            has_access => has_access,
+        });
+    }
+
+    // Build token list from app_tokens + allowthem token info
+    // We collect all allowthem tokens, then match them against our app_tokens table
+    let token_ids = models::list_app_tokens(&state.pool, app.app.id)
         .await
         .map_err(|e| format!("DB error: {e}"))?;
-
-    let user_data: Vec<minijinja::Value> = users
-        .iter()
-        .map(|(u, has_access)| {
-            minijinja::context! {
-                id => u.id,
-                username => u.username,
-                role => u.role,
-                has_access => has_access,
-            }
-        })
-        .collect();
-
-    let tokens = models::list_api_tokens_for_app(&state.pool, app.app.id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
-
-    let token_data: Vec<minijinja::Value> = tokens
-        .iter()
-        .map(|t| {
-            minijinja::context! {
-                id => t.id,
-                name => t.name,
-                created_at => t.created_at,
-            }
-        })
-        .collect();
+    // Collect all tokens for all users -- for a settings page this is acceptable
+    let all_ath_users = state.ath.db().list_users().await.unwrap_or_default();
+    let mut all_tokens: Vec<allowthem_core::ApiTokenInfo> = Vec::new();
+    for u in &all_ath_users {
+        if let Ok(toks) = state.ath.db().list_api_tokens(u.id).await {
+            all_tokens.extend(toks);
+        }
+    }
+    let mut token_data: Vec<minijinja::Value> = Vec::new();
+    for tid in &token_ids {
+        // Find matching token info
+        let info = all_tokens.iter().find(|t| t.id.to_string() == *tid);
+        let name = info
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|| tid.clone());
+        let created_at = info
+            .map(|t| t.created_at.to_string())
+            .unwrap_or_default();
+        token_data.push(minijinja::context! {
+            id => tid,
+            name => name,
+            created_at => created_at,
+        });
+    }
 
     let tmpl = state
         .templates
@@ -250,12 +289,17 @@ struct UpdateNameForm {
 }
 
 async fn update_app_name(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(form): Form<UpdateNameForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
     let name = form.name.trim();
     if name.is_empty() {
         auth::set_flash(&session, "error", "Name cannot be empty").await;
@@ -264,7 +308,7 @@ async fn update_app_name(
             .await
             .map_err(|e| format!("DB error: {e}"))?;
         state.audit.log(
-            &user_id.to_string(),
+            &user_id_str,
             "app_updated",
             "app",
             &app.app.slug,
@@ -282,46 +326,59 @@ struct AccessForm {
 }
 
 async fn update_access(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(form): Form<AccessForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
-    let all_users = models::list_app_users(&state.pool, app.app.id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
+    // Get all users from allowthem and check/update access
+    let all_users = state.ath.db().list_users().await.unwrap_or_default();
+    let granted_ids: std::collections::HashSet<String> = form.access.into_iter().collect();
 
-    let granted_ids: std::collections::HashSet<i64> = form
-        .access
-        .iter()
-        .filter_map(|s| s.parse::<i64>().ok())
-        .collect();
-
-    for (user, currently_has) in &all_users {
-        let should_have = granted_ids.contains(&user.id);
+    for u in &all_users {
+        let uid_str = u.id.to_string();
+        let currently_has = models::user_has_app_access(&state.pool, app.app.id, &uid_str)
+            .await
+            .unwrap_or(false);
+        let should_have = granted_ids.contains(&uid_str);
         if should_have && !currently_has {
-            let _ = models::grant_app_access(&state.pool, app.app.id, user.id).await;
+            let _ = models::grant_app_access(&state.pool, app.app.id, &uid_str).await;
+            let uname = u
+                .username
+                .as_ref()
+                .map(|un| un.as_str().to_string())
+                .unwrap_or_default();
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "app_access_granted",
                 "app",
                 &app.app.slug,
                 Some(
-                    &serde_json::json!({"user_id": user.id, "username": user.username}).to_string(),
+                    &serde_json::json!({"user_id": uid_str, "username": uname}).to_string(),
                 ),
                 Some(app.app.id),
             );
-        } else if !should_have && *currently_has {
-            let _ = models::revoke_app_access(&state.pool, app.app.id, user.id).await;
+        } else if !should_have && currently_has {
+            let _ = models::revoke_app_access(&state.pool, app.app.id, &uid_str).await;
+            let uname = u
+                .username
+                .as_ref()
+                .map(|un| un.as_str().to_string())
+                .unwrap_or_default();
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "app_access_revoked",
                 "app",
                 &app.app.slug,
                 Some(
-                    &serde_json::json!({"user_id": user.id, "username": user.username}).to_string(),
+                    &serde_json::json!({"user_id": uid_str, "username": uname}).to_string(),
                 ),
                 Some(app.app.id),
             );
@@ -338,24 +395,47 @@ struct CreateTokenForm {
 }
 
 async fn create_token(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(form): Form<CreateTokenForm>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "editor").await?;
+    if !auth::has_min_role(&role.0, "editor") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
     let name = form.name.trim();
     if name.is_empty() {
         auth::set_flash(&session, "error", "Token name is required").await;
         return Ok(Redirect::to(&format!("/apps/{}/settings", app.app.slug)).into_response());
     }
 
-    let raw_token = crate::auth::token::generate_token();
-    let token_hash = crate::auth::token::hash_token(&raw_token);
-    match models::create_api_token(&state.pool, user_id, app.app.id, name, &token_hash).await {
-        Ok(_) => {
+    // Create token via allowthem
+    match state
+        .ath
+        .db()
+        .create_api_token(user.id, name, None)
+        .await
+    {
+        Ok((raw_token, info)) => {
+            // Hash the raw token for app_tokens lookup
+            use sha2::{Digest, Sha256};
+            let token_hash = hex::encode(Sha256::digest(raw_token.as_bytes()));
+            let token_id_str = info.id.to_string();
+            if let Err(e) = models::create_app_token(
+                &state.pool,
+                &token_id_str,
+                app.app.id,
+                &token_hash,
+            )
+            .await
+            {
+                tracing::error!("Failed to create app_token mapping: {e}");
+            }
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "token_create",
                 "token",
                 name,
@@ -372,20 +452,31 @@ async fn create_token(
 }
 
 async fn delete_token(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
-    axum::extract::Path((_app_slug, token_id)): axum::extract::Path<(String, i64)>,
+    axum::extract::Path((_app_slug, token_id)): axum::extract::Path<(String, String)>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "editor").await?;
-    models::delete_api_token(&state.pool, token_id, app.app.id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?;
+    if !auth::has_min_role(&role.0, "editor") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
+
+    // Delete from allowthem (parse token_id to ApiTokenId)
+    if let Ok(uuid) = uuid::Uuid::parse_str(&token_id) {
+        let ath_token_id = allowthem_core::ApiTokenId::from_uuid(uuid);
+        let _ = state.ath.db().delete_api_token(ath_token_id).await;
+    }
+    // Delete from app_tokens
+    let _ = models::delete_app_token(&state.pool, &token_id).await;
+
     state.audit.log_with_app(
-        &user_id.to_string(),
+        &user_id_str,
         "token_delete",
         "token",
-        &token_id.to_string(),
+        &token_id,
         None,
         Some(app.app.id),
     );
@@ -394,15 +485,19 @@ async fn delete_token(
 }
 
 async fn data_page(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<Html<String>> {
-    auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let user_role = auth::current_user_role(&session).await.unwrap_or_default();
-    let current_username = auth::current_username(&session).await.unwrap_or_default();
+    let user_role = &role.0;
+    let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
 
     let data_result = flash.as_ref().and_then(|(k, v)| {
@@ -435,12 +530,17 @@ async fn data_page(
 }
 
 async fn import_data(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     mut multipart: axum::extract::Multipart,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
     let app_dir = state.config.app_dir(&app.app.slug);
 
     let mut csrf_token = None;
@@ -490,7 +590,7 @@ async fn import_data(
         Ok(warnings) => {
             crate::cache::rebuild(&state.cache, &state.etag_cache, &state.config.data_dir);
             state.audit.log_with_app(
-                &user_id.to_string(),
+                &user_id_str,
                 "import",
                 "bundle",
                 "",
@@ -537,12 +637,17 @@ async fn import_data(
 }
 
 async fn export_data(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
     Form(_form): Form<std::collections::HashMap<String, String>>,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
     let app_dir = state.config.app_dir(&app.app.slug);
     let tmp =
         std::env::temp_dir().join(format!("substrukt-export-{}.tar.gz", uuid::Uuid::new_v4()));
@@ -553,7 +658,7 @@ async fn export_data(
                 Ok(data) => {
                     let _ = std::fs::remove_file(&tmp);
                     state.audit.log_with_app(
-                        &user_id.to_string(),
+                        &user_id_str,
                         "export",
                         "bundle",
                         "",
@@ -593,11 +698,16 @@ async fn export_data(
 }
 
 async fn delete_app(
+    Extension(user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
 ) -> axum::response::Result<axum::response::Response> {
-    let user_id = auth::require_role(&session, "admin").await?;
+    if !auth::has_min_role(&role.0, "admin") {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Insufficient permissions").into());
+    }
+    let user_id_str = user.id.to_string();
 
     // Prevent deleting the default app
     if app.app.slug == "default" {
@@ -628,7 +738,7 @@ async fn delete_app(
     crate::cache::remove_app(&state.cache, &app.app.slug);
 
     state.audit.log(
-        &user_id.to_string(),
+        &user_id_str,
         "app_delete",
         "app",
         &app.app.slug,
