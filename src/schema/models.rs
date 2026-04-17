@@ -14,6 +14,37 @@ pub struct SubstruktMeta {
     /// Default render mode for markdown fields in API responses ("html" to render by default).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub render: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validate: Vec<CrossFieldRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "rule", rename_all = "snake_case")]
+pub enum CrossFieldRule {
+    After {
+        field: String,
+        reference: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
+    Before {
+        field: String,
+        reference: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
+    RequiredWith {
+        field: String,
+        when: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
+    NotEqual {
+        field: String,
+        reference: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
 }
 
 fn default_storage() -> StorageMode {

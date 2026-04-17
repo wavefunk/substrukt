@@ -14,6 +14,53 @@ pub struct ContentEntry {
     pub data: Value,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ValidationError {
+    pub path: String,
+    pub message: String,
+    pub rule: String,
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.path.is_empty() {
+            write!(f, "{}", self.message)
+        } else {
+            write!(f, "{}: {}", self.path, self.message)
+        }
+    }
+}
+
+pub struct ValidationContext<'a> {
+    pub entry_id: Option<&'a str>,
+    pub target_status: &'a str,
+    pub cache: &'a crate::state::ContentCache,
+    pub app_slug: &'a str,
+    pub schema_slug: &'a str,
+}
+
+pub fn resolve_target_status(
+    data: &Value,
+    content_dir: &Path,
+    schema: &SchemaFile,
+    entry_id: Option<&str>,
+) -> String {
+    if let Some(explicit) = data.get("_status").and_then(|v| v.as_str()) {
+        match explicit {
+            "draft" | "published" => return explicit.to_string(),
+            _ => return "draft".to_string(),
+        }
+    }
+    if let Some(eid) = entry_id {
+        if let Ok(Some(existing)) = get_entry(content_dir, schema, eid) {
+            if let Some(s) = existing.data.get("_status").and_then(|v| v.as_str()) {
+                return s.to_string();
+            }
+        }
+    }
+    "draft".to_string()
+}
+
 pub fn list_entries(content_dir: &Path, schema: &SchemaFile) -> eyre::Result<Vec<ContentEntry>> {
     let slug = &schema.meta.slug;
     match schema.meta.storage {
@@ -359,24 +406,306 @@ pub fn strip_internal_status(data: &Value) -> Value {
     data
 }
 
-pub fn validate_content(schema: &SchemaFile, data: &Value) -> Result<(), Vec<String>> {
-    // Patch schema to accept objects for upload fields, since uploads are stored
-    // as {hash, filename, mime} objects rather than plain strings.
+pub fn validate_content(
+    schema: &SchemaFile,
+    data: &Value,
+    ctx: &ValidationContext<'_>,
+) -> Result<(), Vec<ValidationError>> {
+    let mut errors = Vec::new();
+
+    // JSON Schema validation
     let patched = patch_upload_types(&schema.schema);
     match jsonschema::validator_for(&patched) {
         Ok(validator) => {
-            let errors: Vec<String> = validator
-                .iter_errors(data)
-                .map(|e| format!("{}: {}", e.instance_path, e))
-                .collect();
-            if errors.is_empty() {
-                Ok(())
-            } else {
-                Err(errors)
+            for e in validator.iter_errors(data) {
+                errors.push(ValidationError {
+                    path: e.instance_path.to_string(),
+                    message: e.to_string(),
+                    rule: "schema".to_string(),
+                });
             }
         }
-        Err(e) => Err(vec![format!("Invalid schema: {e}")]),
+        Err(e) => {
+            errors.push(ValidationError {
+                path: String::new(),
+                message: format!("Invalid schema: {e}"),
+                rule: "schema".to_string(),
+            });
+        }
     }
+
+    // Unique constraints
+    if let Some(props) = schema.schema.get("properties").and_then(|p| p.as_object()) {
+        for (key, prop) in props {
+            if prop.get("x-substrukt-unique").and_then(|v| v.as_bool()) == Some(true) {
+                if let Some(err) = validate_unique(key, data.get(key), ctx) {
+                    errors.push(err);
+                }
+            }
+        }
+    }
+
+    // Required-if-published
+    if ctx.target_status == "published" {
+        if let Some(props) = schema.schema.get("properties").and_then(|p| p.as_object()) {
+            for (key, prop) in props {
+                if prop
+                    .get("x-substrukt-required-if-published")
+                    .and_then(|v| v.as_bool())
+                    == Some(true)
+                {
+                    let is_missing = match data.get(key) {
+                        None | Some(Value::Null) => true,
+                        Some(Value::String(s)) => s.is_empty(),
+                        _ => false,
+                    };
+                    if is_missing {
+                        let label = prop.get("title").and_then(|t| t.as_str()).unwrap_or(key);
+                        errors.push(ValidationError {
+                            path: key.clone(),
+                            message: format!("{label} is required when publishing"),
+                            rule: "required_if_published".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Cross-field rules
+    errors.extend(evaluate_cross_field_rules(data, &schema.meta.validate));
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn validate_unique(
+    field: &str,
+    value: Option<&Value>,
+    ctx: &ValidationContext<'_>,
+) -> Option<ValidationError> {
+    let value = value?;
+    if value.is_null() {
+        return None;
+    }
+    if ctx.schema_slug.is_empty() || ctx.cache.is_empty() {
+        return None;
+    }
+
+    let prefix = format!("{}/{}/", ctx.app_slug, ctx.schema_slug);
+    for entry in ctx.cache.iter() {
+        if !entry.key().starts_with(&prefix) {
+            continue;
+        }
+        let entry_id = entry.key().strip_prefix(&prefix).unwrap_or(entry.key());
+        if ctx.entry_id == Some(entry_id) {
+            continue;
+        }
+        let other_val = entry.value().get(field);
+        let matches = match (value, other_val) {
+            (Value::String(a), Some(Value::String(b))) => a.to_lowercase() == b.to_lowercase(),
+            (Value::Number(a), Some(Value::Number(b))) => a == b,
+            (Value::Bool(a), Some(Value::Bool(b))) => a == b,
+            _ => false,
+        };
+        if matches {
+            let display = match value {
+                Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            return Some(ValidationError {
+                path: field.to_string(),
+                message: format!("Value '{display}' must be unique within this collection"),
+                rule: "unique".to_string(),
+            });
+        }
+    }
+    None
+}
+
+pub fn validate_for_publish(
+    schema: &SchemaFile,
+    data: &Value,
+    ctx: &ValidationContext<'_>,
+) -> Result<(), Vec<ValidationError>> {
+    let mut errors = Vec::new();
+    if let Some(props) = schema.schema.get("properties").and_then(|p| p.as_object()) {
+        for (key, prop) in props {
+            if prop
+                .get("x-substrukt-required-if-published")
+                .and_then(|v| v.as_bool())
+                == Some(true)
+            {
+                let is_missing = match data.get(key) {
+                    None | Some(Value::Null) => true,
+                    Some(Value::String(s)) => s.is_empty(),
+                    _ => false,
+                };
+                if is_missing && ctx.target_status == "published" {
+                    let label = prop.get("title").and_then(|t| t.as_str()).unwrap_or(key);
+                    errors.push(ValidationError {
+                        path: key.clone(),
+                        message: format!("{label} is required when publishing"),
+                        rule: "required_if_published".to_string(),
+                    });
+                }
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn evaluate_cross_field_rules(
+    data: &Value,
+    rules: &[crate::schema::models::CrossFieldRule],
+) -> Vec<ValidationError> {
+    use crate::schema::models::CrossFieldRule;
+    let mut errors = Vec::new();
+    for rule in rules {
+        match rule {
+            CrossFieldRule::After {
+                field,
+                reference,
+                message,
+            } => {
+                let fv = data.get(field);
+                let rv = data.get(reference);
+                match (fv, rv) {
+                    (Some(Value::String(a)), Some(Value::String(b))) => {
+                        if a <= b {
+                            errors.push(ValidationError {
+                                path: field.clone(),
+                                message: message.clone().unwrap_or_else(|| {
+                                    format!("{field} must be after {reference}")
+                                }),
+                                rule: "after".to_string(),
+                            });
+                        }
+                    }
+                    (Some(Value::Number(a)), Some(Value::Number(b))) => {
+                        if let (Some(af), Some(bf)) = (a.as_f64(), b.as_f64()) {
+                            if af <= bf {
+                                errors.push(ValidationError {
+                                    path: field.clone(),
+                                    message: message.clone().unwrap_or_else(|| {
+                                        format!("{field} must be after {reference}")
+                                    }),
+                                    rule: "after".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    (Some(_), Some(_)) => {
+                        tracing::warn!(
+                            field,
+                            reference,
+                            "Cross-field 'after' rule: type mismatch between fields, skipping"
+                        );
+                    }
+                    _ => {} // null/missing: skip
+                }
+            }
+            CrossFieldRule::Before {
+                field,
+                reference,
+                message,
+            } => {
+                let fv = data.get(field);
+                let rv = data.get(reference);
+                match (fv, rv) {
+                    (Some(Value::String(a)), Some(Value::String(b))) => {
+                        if a >= b {
+                            errors.push(ValidationError {
+                                path: field.clone(),
+                                message: message.clone().unwrap_or_else(|| {
+                                    format!("{field} must be before {reference}")
+                                }),
+                                rule: "before".to_string(),
+                            });
+                        }
+                    }
+                    (Some(Value::Number(a)), Some(Value::Number(b))) => {
+                        if let (Some(af), Some(bf)) = (a.as_f64(), b.as_f64()) {
+                            if af >= bf {
+                                errors.push(ValidationError {
+                                    path: field.clone(),
+                                    message: message.clone().unwrap_or_else(|| {
+                                        format!("{field} must be before {reference}")
+                                    }),
+                                    rule: "before".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    (Some(_), Some(_)) => {
+                        tracing::warn!(
+                            field,
+                            reference,
+                            "Cross-field 'before' rule: type mismatch, skipping"
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            CrossFieldRule::RequiredWith {
+                field,
+                when,
+                message,
+            } => {
+                let when_present = match data.get(when) {
+                    None | Some(Value::Null) => false,
+                    Some(Value::String(s)) => !s.is_empty(),
+                    _ => true,
+                };
+                if when_present {
+                    let field_missing = match data.get(field) {
+                        None | Some(Value::Null) => true,
+                        Some(Value::String(s)) => s.is_empty(),
+                        _ => false,
+                    };
+                    if field_missing {
+                        errors.push(ValidationError {
+                            path: field.clone(),
+                            message: message.clone().unwrap_or_else(|| {
+                                format!("{field} is required when {when} is provided")
+                            }),
+                            rule: "required_with".to_string(),
+                        });
+                    }
+                }
+            }
+            CrossFieldRule::NotEqual {
+                field,
+                reference,
+                message,
+            } => {
+                let fv = data.get(field);
+                let rv = data.get(reference);
+                match (fv, rv) {
+                    (Some(a), Some(b)) if !a.is_null() && !b.is_null() => {
+                        if a == b {
+                            errors.push(ValidationError {
+                                path: field.clone(),
+                                message: message.clone().unwrap_or_else(|| {
+                                    format!("{field} must not equal {reference}")
+                                }),
+                                rule: "not_equal".to_string(),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    errors
 }
 
 /// Rewrite `{"type": "string", "format": "upload"}` properties to accept
@@ -651,6 +980,7 @@ mod tests {
                 storage,
                 id_field: None,
                 render: None,
+                validate: vec![],
             },
             schema: json!({
                 "type": "object",

@@ -610,7 +610,16 @@ async fn create_entry(
     warn_dangling_references(&data, &schema_file.schema, &state.cache, &app.app.slug);
 
     // Validate
-    if let Err(errors) = content::validate_content(&schema_file, &data) {
+    let target_status = content::resolve_target_status(&data, &content_dir, &schema_file, None);
+    let ctx = content::ValidationContext {
+        entry_id: None,
+        target_status: &target_status,
+        cache: &state.cache,
+        app_slug: &app.app.slug,
+        schema_slug: &schema_slug,
+    };
+    if let Err(validation_errors) = content::validate_content(&schema_file, &data, &ctx) {
+        let errors: Vec<String> = validation_errors.iter().map(|e| e.to_string()).collect();
         let csrf_token = auth::ensure_csrf_token(&session).await;
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
@@ -733,7 +742,17 @@ async fn update_entry(
 
     warn_dangling_references(&data, &schema_file.schema, &state.cache, &app.app.slug);
 
-    if let Err(errors) = content::validate_content(&schema_file, &data) {
+    let target_status =
+        content::resolve_target_status(&data, &content_dir, &schema_file, Some(&entry_id));
+    let ctx = content::ValidationContext {
+        entry_id: Some(&entry_id),
+        target_status: &target_status,
+        cache: &state.cache,
+        app_slug: &app.app.slug,
+        schema_slug: &schema_slug,
+    };
+    if let Err(validation_errors) = content::validate_content(&schema_file, &data, &ctx) {
+        let errors: Vec<String> = validation_errors.iter().map(|e| e.to_string()).collect();
         let csrf_token = auth::ensure_csrf_token(&session).await;
         let ref_options =
             build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);

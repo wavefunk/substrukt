@@ -144,13 +144,27 @@ fn validate_imported_content(data_dir: &Path) -> Vec<String> {
         };
 
         for entry in &entries {
+            let target_status = entry
+                .data
+                .get("_status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("draft")
+                .to_string();
             // Strip _-prefixed keys before validation — _status and _id are
             // internal metadata that may not be in the JSON Schema
             let mut data = entry.data.clone();
             if let Some(obj) = data.as_object_mut() {
                 obj.retain(|k, _| !k.starts_with('_'));
             }
-            if let Err(errors) = crate::content::validate_content(schema, &data) {
+            let empty_cache = dashmap::DashMap::new();
+            let ctx = crate::content::ValidationContext {
+                entry_id: Some(&entry.id),
+                target_status: &target_status,
+                cache: &empty_cache,
+                app_slug: "",
+                schema_slug: &schema.meta.slug,
+            };
+            if let Err(errors) = crate::content::validate_content(schema, &data, &ctx) {
                 for err in errors {
                     warnings.push(format!("{}/{}: {}", schema.meta.slug, entry.id, err));
                 }

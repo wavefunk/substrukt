@@ -483,7 +483,15 @@ async fn create_entry(
             .into_response();
     }
 
-    if let Err(errors) = content::validate_content(&schema_file, &data) {
+    let target_status = content::resolve_target_status(&data, &content_dir, &schema_file, None);
+    let ctx = content::ValidationContext {
+        entry_id: None,
+        target_status: &target_status,
+        cache: &state.cache,
+        app_slug: &app.app.slug,
+        schema_slug: &schema_slug,
+    };
+    if let Err(errors) = content::validate_content(&schema_file, &data, &ctx) {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"errors": errors})),
@@ -543,7 +551,16 @@ async fn update_entry(
         }
     };
 
-    if let Err(errors) = content::validate_content(&schema_file, &data) {
+    let target_status =
+        content::resolve_target_status(&data, &content_dir, &schema_file, Some(&entry_id));
+    let ctx = content::ValidationContext {
+        entry_id: Some(&entry_id),
+        target_status: &target_status,
+        cache: &state.cache,
+        app_slug: &app.app.slug,
+        schema_slug: &schema_slug,
+    };
+    if let Err(errors) = content::validate_content(&schema_file, &data, &ctx) {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"errors": errors})),
@@ -710,7 +727,16 @@ async fn upsert_single(
         }
     };
 
-    if let Err(errors) = content::validate_content(&schema_file, &data) {
+    let target_status =
+        content::resolve_target_status(&data, &content_dir, &schema_file, Some("_single"));
+    let ctx = content::ValidationContext {
+        entry_id: Some("_single"),
+        target_status: &target_status,
+        cache: &state.cache,
+        app_slug: &app.app.slug,
+        schema_slug: &schema_slug,
+    };
+    if let Err(errors) = content::validate_content(&schema_file, &data, &ctx) {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"errors": errors})),
