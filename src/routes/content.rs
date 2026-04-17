@@ -310,57 +310,89 @@ fn build_reference_options(
     app_slug: &str,
 ) -> ReferenceOptions {
     let mut opts = ReferenceOptions::new();
+    build_reference_options_inner(schema, cache, prefix, app_slug, &mut opts, 0);
+    opts
+}
+
+fn build_reference_options_inner(
+    schema: &serde_json::Value,
+    cache: &ContentCache,
+    prefix: &str,
+    app_slug: &str,
+    opts: &mut ReferenceOptions,
+    depth: usize,
+) {
+    if depth > 32 {
+        return;
+    }
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
-        return opts;
+        return;
     };
     for (key, prop) in props {
         if key == "_id" {
             continue;
         }
-        let is_ref = prop.get("type").and_then(|t| t.as_str()) == Some("string")
-            && prop.get("format").and_then(|f| f.as_str()) == Some("reference");
-        if !is_ref {
-            continue;
-        }
-        let target_slug = prop
-            .get("x-substrukt-reference")
-            .and_then(|r| r.get("schema"))
-            .and_then(|s| s.as_str());
-        let Some(target_slug) = target_slug else {
-            continue;
-        };
         let field_name = if prefix.is_empty() {
             key.clone()
         } else {
             format!("{prefix}.{key}")
         };
-        let target_prefix = format!("{app_slug}/{target_slug}/");
-        let mut entries: Vec<(String, String)> = cache
-            .iter()
-            .filter(|entry| entry.key().starts_with(&target_prefix))
-            .map(|entry| {
-                let id = entry
-                    .key()
-                    .strip_prefix(&target_prefix)
-                    .unwrap_or(entry.key())
-                    .to_string();
-                let label = entry
-                    .value()
-                    .as_object()
-                    .and_then(|obj| {
-                        obj.iter()
-                            .find(|(k, v)| !k.starts_with('_') && v.is_string())
-                            .and_then(|(_, v)| v.as_str())
+        let field_type = prop.get("type").and_then(|t| t.as_str());
+        let format = prop.get("format").and_then(|f| f.as_str());
+
+        if field_type == Some("string") && format == Some("reference") {
+            let target_slug = prop
+                .get("x-substrukt-reference")
+                .and_then(|r| r.get("schema"))
+                .and_then(|s| s.as_str());
+            let Some(target_slug) = target_slug else {
+                continue;
+            };
+            let label_field = prop
+                .get("x-substrukt-reference")
+                .and_then(|r| r.get("label_field"))
+                .and_then(|l| l.as_str());
+            let target_prefix = format!("{app_slug}/{target_slug}/");
+            let mut entries: Vec<(String, String)> = cache
+                .iter()
+                .filter(|entry| entry.key().starts_with(&target_prefix))
+                .map(|entry| {
+                    let id = entry
+                        .key()
+                        .strip_prefix(&target_prefix)
+                        .unwrap_or(entry.key())
+                        .to_string();
+                    let label = if let Some(lf) = label_field {
+                        entry
+                            .value()
+                            .get(lf)
+                            .and_then(|v| v.as_str())
                             .map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                    .or_else(|| {
+                        entry.value().as_object().and_then(|obj| {
+                            obj.iter()
+                                .find(|(k, v)| !k.starts_with('_') && v.is_string())
+                                .and_then(|(_, v)| v.as_str())
+                                .map(|s| s.to_string())
+                        })
                     })
                     .unwrap_or_else(|| id.clone());
-                (id, label)
-            })
-            .collect();
-        entries.sort_by(|a, b| a.1.cmp(&b.1));
-        opts.insert(field_name, entries);
+                    (id, label)
+                })
+                .collect();
+            entries.sort_by(|a, b| a.1.cmp(&b.1));
+            opts.insert(field_name, entries);
+        } else if field_type == Some("object") {
+            build_reference_options_inner(prop, cache, &field_name, app_slug, opts, depth + 1);
+        } else if field_type == Some("array") {
+            if let Some(items) = prop.get("items") {
+                build_reference_options_inner(items, cache, &field_name, app_slug, opts, depth + 1);
+            }
+        }
     }
-    opts
 }
 
 fn warn_dangling_references(
@@ -369,6 +401,19 @@ fn warn_dangling_references(
     cache: &ContentCache,
     app_slug: &str,
 ) {
+    warn_dangling_references_inner(data, schema, cache, app_slug, 0);
+}
+
+fn warn_dangling_references_inner(
+    data: &serde_json::Value,
+    schema: &serde_json::Value,
+    cache: &ContentCache,
+    app_slug: &str,
+    depth: usize,
+) {
+    if depth > 32 {
+        return;
+    }
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return;
     };
@@ -376,28 +421,40 @@ fn warn_dangling_references(
         return;
     };
     for (key, prop) in props {
-        let is_ref = prop.get("type").and_then(|t| t.as_str()) == Some("string")
-            && prop.get("format").and_then(|f| f.as_str()) == Some("reference");
-        if !is_ref {
-            continue;
-        }
-        let Some(target_slug) = prop
-            .get("x-substrukt-reference")
-            .and_then(|r| r.get("schema"))
-            .and_then(|s| s.as_str())
-        else {
-            continue;
-        };
-        if let Some(serde_json::Value::String(ref_id)) = obj.get(key) {
-            if !ref_id.is_empty() {
-                let cache_key = format!("{app_slug}/{target_slug}/{ref_id}");
-                if cache.get(&cache_key).is_none() {
-                    tracing::warn!(
-                        field = key,
-                        reference_id = ref_id,
-                        target_schema = target_slug,
-                        "Dangling reference: target entry not found in cache"
-                    );
+        let field_type = prop.get("type").and_then(|t| t.as_str());
+        let format = prop.get("format").and_then(|f| f.as_str());
+
+        if field_type == Some("string") && format == Some("reference") {
+            let Some(target_slug) = prop
+                .get("x-substrukt-reference")
+                .and_then(|r| r.get("schema"))
+                .and_then(|s| s.as_str())
+            else {
+                continue;
+            };
+            if let Some(serde_json::Value::String(ref_id)) = obj.get(key) {
+                if !ref_id.is_empty() {
+                    let cache_key = format!("{app_slug}/{target_slug}/{ref_id}");
+                    if cache.get(&cache_key).is_none() {
+                        tracing::warn!(
+                            field = key,
+                            reference_id = ref_id,
+                            target_schema = target_slug,
+                            "Dangling reference: target entry not found in cache"
+                        );
+                    }
+                }
+            }
+        } else if field_type == Some("object") {
+            if let Some(nested) = obj.get(key) {
+                warn_dangling_references_inner(nested, prop, cache, app_slug, depth + 1);
+            }
+        } else if field_type == Some("array") {
+            if let Some(items_schema) = prop.get("items")
+                && let Some(serde_json::Value::Array(arr)) = obj.get(key)
+            {
+                for item in arr {
+                    warn_dangling_references_inner(item, items_schema, cache, app_slug, depth + 1);
                 }
             }
         }

@@ -562,6 +562,59 @@ pub fn validate_for_publish(
     }
 }
 
+pub fn find_referencing_entries(
+    cache: &crate::state::ContentCache,
+    schemas_dir: &Path,
+    app_slug: &str,
+    target_schema_slug: &str,
+    target_entry_id: &str,
+) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    let schemas = match crate::schema::list_schemas(schemas_dir) {
+        Ok(s) => s,
+        Err(_) => return results,
+    };
+    for schema in &schemas {
+        let has_ref_to_target = schema
+            .schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+            .map(|props| {
+                props.values().any(|prop| {
+                    prop.get("type").and_then(|t| t.as_str()) == Some("string")
+                        && prop.get("format").and_then(|f| f.as_str()) == Some("reference")
+                        && prop
+                            .get("x-substrukt-reference")
+                            .and_then(|r| r.get("schema"))
+                            .and_then(|s| s.as_str())
+                            == Some(target_schema_slug)
+                })
+            })
+            .unwrap_or(false);
+        if !has_ref_to_target {
+            continue;
+        }
+        let prefix = format!("{}/{}/", app_slug, schema.meta.slug);
+        for entry in cache.iter() {
+            if !entry.key().starts_with(&prefix) {
+                continue;
+            }
+            let entry_id = entry
+                .key()
+                .strip_prefix(&prefix)
+                .unwrap_or(entry.key())
+                .to_string();
+            if let Some(obj) = entry.value().as_object() {
+                let references_target = obj.values().any(|v| v.as_str() == Some(target_entry_id));
+                if references_target {
+                    results.push((schema.meta.slug.clone(), entry_id));
+                }
+            }
+        }
+    }
+    results
+}
+
 fn evaluate_cross_field_rules(
     data: &Value,
     rules: &[crate::schema::models::CrossFieldRule],

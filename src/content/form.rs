@@ -8,6 +8,21 @@ const MAX_NESTING_DEPTH: usize = 32;
 /// Map from field name to list of (id, label) pairs for reference dropdowns.
 pub type ReferenceOptions = HashMap<String, Vec<(String, String)>>;
 
+fn strip_array_indices(name: &str) -> String {
+    let mut result = String::with_capacity(name.len());
+    let mut in_bracket = false;
+    for c in name.chars() {
+        if c == '[' {
+            in_bracket = true;
+        } else if c == ']' {
+            in_bracket = false;
+        } else if !in_bracket {
+            result.push(c);
+        }
+    }
+    result
+}
+
 fn escape_html_attr(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('"', "&quot;")
@@ -397,7 +412,11 @@ fn render_field(
         ("string", Some("reference")) => {
             let val = value.and_then(|v| v.as_str()).unwrap_or("");
             let empty_opts = Vec::new();
-            let options = ref_options.get(name).unwrap_or(&empty_opts);
+            let stripped_name = strip_array_indices(name);
+            let options = ref_options
+                .get(name)
+                .or_else(|| ref_options.get(&stripped_name))
+                .unwrap_or(&empty_opts);
             let mut opts_html = r#"<option value="">-- Select --</option>"#.to_string();
             for (id, label_text) in options {
                 let selected = if id == val { " selected" } else { "" };

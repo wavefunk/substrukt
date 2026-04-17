@@ -265,6 +265,19 @@ fn resolve_references(
     cache: &crate::state::ContentCache,
     app_slug: &str,
 ) {
+    resolve_references_inner(data, schema, cache, app_slug, 0);
+}
+
+fn resolve_references_inner(
+    data: &mut serde_json::Value,
+    schema: &serde_json::Value,
+    cache: &crate::state::ContentCache,
+    app_slug: &str,
+    depth: usize,
+) {
+    if depth > 32 {
+        return;
+    }
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return;
     };
@@ -272,22 +285,34 @@ fn resolve_references(
         return;
     };
     for (key, prop) in props {
-        let is_ref = prop.get("type").and_then(|t| t.as_str()) == Some("string")
-            && prop.get("format").and_then(|f| f.as_str()) == Some("reference");
-        if !is_ref {
-            continue;
-        }
-        let target_slug = prop
-            .get("x-substrukt-reference")
-            .and_then(|r| r.get("schema"))
-            .and_then(|s| s.as_str());
-        let Some(target_slug) = target_slug else {
-            continue;
-        };
-        if let Some(serde_json::Value::String(ref_id)) = obj.get(key).cloned() {
-            let cache_key = format!("{app_slug}/{target_slug}/{ref_id}");
-            if let Some(entry) = cache.get(&cache_key) {
-                obj.insert(key.clone(), entry.value().clone());
+        let field_type = prop.get("type").and_then(|t| t.as_str());
+        let format = prop.get("format").and_then(|f| f.as_str());
+
+        if field_type == Some("string") && format == Some("reference") {
+            let target_slug = prop
+                .get("x-substrukt-reference")
+                .and_then(|r| r.get("schema"))
+                .and_then(|s| s.as_str());
+            let Some(target_slug) = target_slug else {
+                continue;
+            };
+            if let Some(serde_json::Value::String(ref_id)) = obj.get(key).cloned() {
+                let cache_key = format!("{app_slug}/{target_slug}/{ref_id}");
+                if let Some(entry) = cache.get(&cache_key) {
+                    obj.insert(key.clone(), entry.value().clone());
+                }
+            }
+        } else if field_type == Some("object") {
+            if let Some(nested) = obj.get_mut(key) {
+                resolve_references_inner(nested, prop, cache, app_slug, depth + 1);
+            }
+        } else if field_type == Some("array") {
+            if let Some(items_schema) = prop.get("items")
+                && let Some(serde_json::Value::Array(arr)) = obj.get_mut(key)
+            {
+                for item in arr.iter_mut() {
+                    resolve_references_inner(item, items_schema, cache, app_slug, depth + 1);
+                }
             }
         }
     }
@@ -655,6 +680,14 @@ async fn delete_entry(
         }
     };
 
+    let referencing = content::find_referencing_entries(
+        &state.cache,
+        &schemas_dir,
+        &app.app.slug,
+        &schema_slug,
+        &entry_id,
+    );
+
     let _ = uploads::db_delete_references(&state.pool, app.app.id, &schema_slug, &entry_id).await;
     match content::delete_entry(&content_dir, &schema_file, &entry_id) {
         Ok(()) => {
@@ -669,7 +702,17 @@ async fn delete_entry(
                 None,
                 Some(app.app.id),
             );
-            StatusCode::NO_CONTENT.into_response()
+            let mut response = StatusCode::NO_CONTENT.into_response();
+            if !referencing.is_empty() {
+                let warnings: Vec<String> = referencing
+                    .iter()
+                    .map(|(s, e)| format!("{s}/{e}"))
+                    .collect();
+                if let Ok(val) = HeaderValue::from_str(&warnings.join(", ")) {
+                    response.headers_mut().insert("x-substrukt-warnings", val);
+                }
+            }
+            response
         }
         Err(e) => internal_error(e).into_response(),
     }
