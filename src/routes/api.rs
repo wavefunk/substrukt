@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering;
 
 use axum::{
     Router,
-    extract::{Multipart, Path, Query, State},
+    extract::{Multipart, Path, Query, RawQuery, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Json},
@@ -66,6 +66,8 @@ fn json_with_etag(
     resp
 }
 
+const MAX_API_LIMIT: usize = 500;
+
 #[derive(serde::Deserialize, Default)]
 pub struct ListParams {
     #[serde(default)]
@@ -74,6 +76,46 @@ pub struct ListParams {
     pub status: String,
     #[serde(default)]
     pub render: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub offset: Option<usize>,
+    #[serde(default)]
+    pub sort: Option<String>,
+    #[serde(default)]
+    pub order: Option<String>,
+}
+
+fn extract_filters_from_query(raw_query: &str) -> Vec<(String, String)> {
+    raw_query
+        .split('&')
+        .filter_map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            let field = key.strip_prefix("filter.")?;
+            let value = simple_url_decode(value);
+            Some((field.to_string(), value))
+        })
+        .collect()
+}
+
+fn simple_url_decode(s: &str) -> String {
+    let s = s.replace('+', " ");
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                result.push(byte as char);
+            } else {
+                result.push('%');
+                result.push_str(&hex);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 fn should_render(params_render: &str, schema_render: Option<&str>) -> bool {
@@ -291,6 +333,7 @@ async fn list_entries(
     app: ApiAppContext,
     Path((_app_slug, schema_slug)): Path<(String, String)>,
     Query(params): Query<ListParams>,
+    RawQuery(raw_query): RawQuery,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     if let Err(e) = require_token_app(&token, &app) {
@@ -308,21 +351,31 @@ async fn list_entries(
 
     match content::list_entries(&content_dir, &schema_file) {
         Ok(entries) => {
-            // Filter by status (default: published only)
-            let status = if params.status.is_empty() {
-                "published"
-            } else {
-                &params.status
-            };
-            let entries = content::filter_by_status(entries, status);
+            let filters = extract_filters_from_query(raw_query.as_deref().unwrap_or(""));
+            let use_envelope = params.limit.is_some() || params.offset.is_some();
+            let limit = params.limit.map(|l| if l == 0 { 20 } else { l.min(MAX_API_LIMIT) });
 
-            let q = params.q.trim().to_string();
-            let entries = if q.is_empty() {
-                entries
-            } else {
-                content::filter_entries(entries, &q)
+            let query_params = content::QueryParams {
+                status: if params.status.is_empty() {
+                    "published".into()
+                } else {
+                    params.status.clone()
+                },
+                q: params.q.trim().to_string(),
+                filters,
+                sort_field: params.sort.clone().unwrap_or_else(|| "_id".into()),
+                sort_order: match params.order.as_deref() {
+                    Some("desc") => content::SortOrder::Desc,
+                    _ => content::SortOrder::Asc,
+                },
+                offset: params.offset.unwrap_or(0),
+                limit,
             };
-            let data: Vec<serde_json::Value> = entries
+
+            let result = content::query_entries(entries, &query_params);
+
+            let data: Vec<serde_json::Value> = result
+                .entries
                 .iter()
                 .map(|e| {
                     let mut d = content::strip_internal_status(&e.data);
@@ -333,8 +386,22 @@ async fn list_entries(
                     d
                 })
                 .collect();
-            let value = serde_json::json!(data);
-            json_with_etag(&value, &headers, &state.etag_cache, None)
+
+            if use_envelope {
+                let value = serde_json::json!({
+                    "data": data,
+                    "meta": {
+                        "total": result.total,
+                        "limit": limit.unwrap_or(result.total),
+                        "offset": query_params.offset,
+                        "count": data.len(),
+                    }
+                });
+                Json(value).into_response()
+            } else {
+                let value = serde_json::json!(data);
+                json_with_etag(&value, &headers, &state.etag_cache, None)
+            }
         }
         Err(e) => internal_error(e).into_response(),
     }
