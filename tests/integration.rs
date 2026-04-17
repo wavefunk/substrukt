@@ -8711,7 +8711,11 @@ async fn api_delete_referenced_entry_returns_warning_header() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "delete should still succeed");
+    assert_eq!(
+        resp.status(),
+        StatusCode::NO_CONTENT,
+        "delete should still succeed"
+    );
 
     let warnings = resp
         .headers()
@@ -8850,4 +8854,420 @@ async fn api_self_referencing_schema_works() {
         "self-reference should resolve to full parent object"
     );
     assert_eq!(child["parent"]["name"], "Root");
+}
+
+// ── Bulk operations tests (sk-02) ─────────────────────────
+
+const BULK_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Bulk Items", "slug": "bulk-items", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "count": {"type": "integer", "title": "Count"}
+    },
+    "required": ["title"]
+}"#;
+
+const BULK_PUB_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Bulk Pub", "slug": "bulk-pub", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "summary": {"type": "string", "title": "Summary", "x-substrukt-required-if-published": true}
+    },
+    "required": ["title"]
+}"#;
+
+#[tokio::test]
+async fn bulk_create_success() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-create").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Alpha", "count": 1},
+                {"title": "Bravo", "count": 2},
+                {"title": "Charlie", "count": 3}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["created"], 3);
+    assert_eq!(body["failed"], 0);
+    assert_eq!(body["results"].as_array().unwrap().len(), 3);
+    assert!(body["results"].as_array().unwrap().iter().all(|r| r["status"] == "created"));
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/bulk-items?status=all"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let entries: Vec<serde_json::Value> = resp.json().await.unwrap();
+    assert_eq!(entries.len(), 3, "all 3 entries should be accessible");
+}
+
+#[tokio::test]
+async fn bulk_create_partial_failure() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-partial").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Good"},
+                {"title": 123},
+                {"title": "Also Good"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["created"], 2);
+    assert_eq!(body["failed"], 1);
+    let results = body["results"].as_array().unwrap();
+    assert_eq!(results[0]["status"], "created");
+    assert_eq!(results[1]["status"], "error");
+    assert!(results[1]["errors"].is_array());
+    assert_eq!(results[2]["status"], "created");
+}
+
+#[tokio::test]
+async fn bulk_create_empty_array_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-empty").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"entries": []}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("empty"));
+}
+
+#[tokio::test]
+async fn bulk_create_single_kind_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-single").await;
+
+    let single_schema = r#"{
+        "x-substrukt": {"title": "Settings", "slug": "settings", "storage": "directory", "kind": "single"},
+        "type": "object",
+        "properties": {"value": {"type": "string"}},
+        "required": ["value"]
+    }"#;
+    s.create_schema(single_schema).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/settings/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"entries": [{"value": "test"}]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn bulk_update_success_with_snapshots() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-update").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Entry A"},
+                {"title": "Entry B"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let create_body: serde_json::Value = resp.json().await.unwrap();
+    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
+    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/update"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"_id": id_a, "title": "Updated A"},
+                {"_id": id_b, "title": "Updated B"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["updated"], 2);
+    assert_eq!(body["failed"], 0);
+
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/bulk-items/{id_a}?status=all"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let entry: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(entry["title"], "Updated A");
+
+    let resp = api
+        .get(s.url(&format!(
+            "/api/v1/apps/default/content/bulk-items/{id_a}/versions"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let versions: Vec<serde_json::Value> = resp.json().await.unwrap();
+    assert_eq!(versions.len(), 1, "bulk update should create a version snapshot");
+}
+
+#[tokio::test]
+async fn bulk_update_missing_id_error() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-no-id").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/update"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [{"title": "No ID"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["failed"], 1);
+    assert!(body["results"][0]["error"].as_str().unwrap().contains("_id"));
+}
+
+#[tokio::test]
+async fn bulk_delete_success() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-delete").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Delete Me A"},
+                {"title": "Delete Me B"},
+                {"title": "Keep Me"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let create_body: serde_json::Value = resp.json().await.unwrap();
+    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
+    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/delete"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"ids": [id_a, id_b]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["deleted"], 2);
+    assert_eq!(body["failed"], 0);
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/bulk-items?status=all"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let remaining: Vec<serde_json::Value> = resp.json().await.unwrap();
+    assert_eq!(remaining.len(), 1, "only 'Keep Me' should remain");
+}
+
+#[tokio::test]
+async fn bulk_publish_with_validation() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-pub").await;
+    s.create_schema(BULK_PUB_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-pub/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Has Summary", "summary": "A summary"},
+                {"title": "No Summary"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let create_body: serde_json::Value = resp.json().await.unwrap();
+    let id_with = create_body["results"][0]["id"].as_str().unwrap().to_string();
+    let id_without = create_body["results"][1]["id"].as_str().unwrap().to_string();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-pub/_bulk/publish"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"ids": [id_with, id_without]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["published"], 1, "only entry with summary should publish");
+    assert_eq!(body["failed"], 1, "entry without summary should fail");
+
+    let results = body["results"].as_array().unwrap();
+    let ok_result = results.iter().find(|r| r["status"] == "published").unwrap();
+    assert_eq!(ok_result["id"].as_str().unwrap(), id_with);
+    let err_result = results.iter().find(|r| r["status"] == "error").unwrap();
+    assert_eq!(err_result["id"].as_str().unwrap(), id_without);
+    assert!(err_result["errors"].is_array());
+}
+
+#[tokio::test]
+async fn bulk_unpublish_success() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-unpub").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "entries": [
+                {"title": "Pub A", "_status": "published"},
+                {"title": "Pub B", "_status": "published"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let create_body: serde_json::Value = resp.json().await.unwrap();
+    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
+    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/unpublish"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"ids": [id_a, id_b]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["unpublished"], 2);
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/bulk-items?status=draft&limit=10"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["meta"]["total"], 2, "both should now be drafts");
+}
+
+#[tokio::test]
+async fn bulk_create_no_auth_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .json(&serde_json::json!({"entries": [{"title": "test"}]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn bulk_delete_nonexistent_partial() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("bulk-del-404").await;
+    s.create_schema(BULK_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    api.post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/create"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"entries": [{"title": "Exists"}]}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/delete"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"ids": ["exists", "does-not-exist"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["total"], 2);
+    assert!(body["deleted"].as_u64().unwrap() + body["failed"].as_u64().unwrap() == 2);
 }
