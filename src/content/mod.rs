@@ -2107,4 +2107,551 @@ mod tests {
         assert_eq!(result.total, 3);
         assert_eq!(result.entries.len(), 0, "limit=0 should return 0 entries");
     }
+
+    // ── Advanced validation tests ──────────────────────────────
+
+    fn schema_with_unique(slug: &str) -> SchemaFile {
+        SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: slug.to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "x-substrukt-unique": true }
+                }
+            }),
+        }
+    }
+
+    fn empty_ctx<'a>(cache: &'a dashmap::DashMap<String, Value>) -> ValidationContext<'a> {
+        ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache,
+            app_slug: "default",
+            schema_slug: "test",
+        }
+    }
+
+    #[test]
+    fn validate_unique_no_duplicate() {
+        let cache = dashmap::DashMap::new();
+        cache.insert(
+            "default/test/existing".into(),
+            json!({"title": "Existing"}),
+        );
+        let schema = schema_with_unique("test");
+        let data = json!({"title": "Different"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_unique_duplicate_rejected() {
+        let cache = dashmap::DashMap::new();
+        cache.insert(
+            "default/test/existing".into(),
+            json!({"title": "Hello"}),
+        );
+        let schema = schema_with_unique("test");
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.rule == "unique"));
+    }
+
+    #[test]
+    fn validate_unique_case_insensitive() {
+        let cache = dashmap::DashMap::new();
+        cache.insert(
+            "default/test/existing".into(),
+            json!({"title": "Hello"}),
+        );
+        let schema = schema_with_unique("test");
+        let data = json!({"title": "hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_err(), "case-insensitive match should reject");
+        assert!(result.unwrap_err().iter().any(|e| e.rule == "unique"));
+    }
+
+    #[test]
+    fn validate_unique_self_excluded() {
+        let cache = dashmap::DashMap::new();
+        cache.insert(
+            "default/test/my-entry".into(),
+            json!({"title": "Hello"}),
+        );
+        let schema = schema_with_unique("test");
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: Some("my-entry"),
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok(), "updating self with same value should pass");
+    }
+
+    #[test]
+    fn validate_unique_missing_value_skipped() {
+        let cache = dashmap::DashMap::new();
+        cache.insert("default/test/a".into(), json!({"title": "Hello"}));
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "x-substrukt-unique": true },
+                    "other": { "type": "string" }
+                }
+            }),
+        };
+        let data = json!({"other": "something"});
+        let ctx = empty_ctx(&cache);
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok(), "missing unique field should not trigger uniqueness check");
+    }
+
+    #[test]
+    fn validate_unique_empty_cache_skipped() {
+        let cache = dashmap::DashMap::new();
+        let schema = schema_with_unique("test");
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok(), "empty schema_slug should skip uniqueness");
+    }
+
+    #[test]
+    fn validate_required_if_published_draft_ok() {
+        let cache = dashmap::DashMap::new();
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "summary": { "type": "string", "title": "Summary", "x-substrukt-required-if-published": true }
+                }
+            }),
+        };
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "draft",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok(), "draft without required-if-published field should pass");
+    }
+
+    #[test]
+    fn validate_required_if_published_missing_rejected() {
+        let cache = dashmap::DashMap::new();
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "summary": { "type": "string", "title": "Summary", "x-substrukt-required-if-published": true }
+                }
+            }),
+        };
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "published",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.rule == "required_if_published"));
+    }
+
+    #[test]
+    fn validate_required_if_published_empty_string_rejected() {
+        let cache = dashmap::DashMap::new();
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "summary": { "type": "string", "title": "Summary", "x-substrukt-required-if-published": true }
+                }
+            }),
+        };
+        let data = json!({"title": "Hello", "summary": ""});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "published",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_err(), "empty string should be treated as missing");
+    }
+
+    #[test]
+    fn cross_field_after_valid() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "end".into(),
+            reference: "start".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-01-01", "end": "2024-12-31"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn cross_field_after_invalid() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "end".into(),
+            reference: "start".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-12-31", "end": "2024-01-01"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].rule, "after");
+    }
+
+    #[test]
+    fn cross_field_after_equal_rejected() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "end".into(),
+            reference: "start".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-06-15", "end": "2024-06-15"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1, "equal values should fail 'after' rule (strictly greater)");
+    }
+
+    #[test]
+    fn cross_field_after_missing_field_skipped() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "end".into(),
+            reference: "start".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-01-01"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty(), "missing field should skip rule");
+    }
+
+    #[test]
+    fn cross_field_after_with_numbers() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "max".into(),
+            reference: "min".into(),
+            message: None,
+        }];
+        let data = json!({"min": 10, "max": 5});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1, "max < min should fail");
+    }
+
+    #[test]
+    fn cross_field_before_valid() {
+        let rules = vec![crate::schema::models::CrossFieldRule::Before {
+            field: "start".into(),
+            reference: "end".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-01-01", "end": "2024-12-31"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn cross_field_before_invalid() {
+        let rules = vec![crate::schema::models::CrossFieldRule::Before {
+            field: "start".into(),
+            reference: "end".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-12-31", "end": "2024-01-01"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].rule, "before");
+    }
+
+    #[test]
+    fn cross_field_not_equal_same_value_rejected() {
+        let rules = vec![crate::schema::models::CrossFieldRule::NotEqual {
+            field: "start".into(),
+            reference: "end".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-06-15", "end": "2024-06-15"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].rule, "not_equal");
+    }
+
+    #[test]
+    fn cross_field_not_equal_different_values_ok() {
+        let rules = vec![crate::schema::models::CrossFieldRule::NotEqual {
+            field: "start".into(),
+            reference: "end".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-01-01", "end": "2024-12-31"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn cross_field_not_equal_null_skipped() {
+        let rules = vec![crate::schema::models::CrossFieldRule::NotEqual {
+            field: "start".into(),
+            reference: "end".into(),
+            message: None,
+        }];
+        let data = json!({"start": "2024-01-01"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty(), "missing reference should skip rule");
+    }
+
+    #[test]
+    fn cross_field_required_with_triggered() {
+        let rules = vec![crate::schema::models::CrossFieldRule::RequiredWith {
+            field: "link_title".into(),
+            when: "url".into(),
+            message: None,
+        }];
+        let data = json!({"url": "https://example.com"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].rule, "required_with");
+    }
+
+    #[test]
+    fn cross_field_required_with_condition_absent() {
+        let rules = vec![crate::schema::models::CrossFieldRule::RequiredWith {
+            field: "link_title".into(),
+            when: "url".into(),
+            message: None,
+        }];
+        let data = json!({});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty(), "absent condition should not trigger");
+    }
+
+    #[test]
+    fn cross_field_required_with_condition_empty_string() {
+        let rules = vec![crate::schema::models::CrossFieldRule::RequiredWith {
+            field: "link_title".into(),
+            when: "url".into(),
+            message: None,
+        }];
+        let data = json!({"url": ""});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert!(errors.is_empty(), "empty string condition should not trigger");
+    }
+
+    #[test]
+    fn cross_field_required_with_boolean_false_triggers() {
+        let rules = vec![crate::schema::models::CrossFieldRule::RequiredWith {
+            field: "reason".into(),
+            when: "active".into(),
+            message: None,
+        }];
+        let data = json!({"active": false});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors.len(), 1, "boolean false is non-null/non-empty, should trigger");
+    }
+
+    #[test]
+    fn cross_field_custom_message() {
+        let rules = vec![crate::schema::models::CrossFieldRule::After {
+            field: "end".into(),
+            reference: "start".into(),
+            message: Some("End date cannot be before start date".into()),
+        }];
+        let data = json!({"start": "2024-12-31", "end": "2024-01-01"});
+        let errors = evaluate_cross_field_rules(&data, &rules);
+        assert_eq!(errors[0].message, "End date cannot be before start date");
+    }
+
+    #[test]
+    fn validate_for_publish_missing_field_rejected() {
+        let cache = dashmap::DashMap::new();
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "summary": { "type": "string", "title": "Summary", "x-substrukt-required-if-published": true }
+                }
+            }),
+        };
+        let data = json!({"title": "Hello"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "published",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_for_publish(&schema, &data, &ctx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_for_publish_field_present_ok() {
+        let cache = dashmap::DashMap::new();
+        let schema = SchemaFile {
+            meta: crate::schema::models::SubstruktMeta {
+                title: "Test".to_string(),
+                slug: "test".to_string(),
+                kind: Kind::Collection,
+                storage: StorageMode::Directory,
+                id_field: None,
+                render: None,
+                validate: vec![],
+            },
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "summary": { "type": "string", "title": "Summary", "x-substrukt-required-if-published": true }
+                }
+            }),
+        };
+        let data = json!({"title": "Hello", "summary": "A summary"});
+        let ctx = ValidationContext {
+            entry_id: None,
+            target_status: "published",
+            cache: &cache,
+            app_slug: "default",
+            schema_slug: "test",
+        };
+        let result = validate_for_publish(&schema, &data, &ctx);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn schema_without_validate_key_works() {
+        let cache = dashmap::DashMap::new();
+        let schema = test_schema(Kind::Collection, StorageMode::Directory);
+        let data = json!({"title": "Hello"});
+        let ctx = empty_ctx(&cache);
+        let result = validate_content(&schema, &data, &ctx);
+        assert!(result.is_ok(), "schema without validate key should work fine");
+    }
+
+    #[test]
+    fn resolve_target_status_explicit() {
+        let tmp = TempDir::new().unwrap();
+        let schema = test_schema(Kind::Collection, StorageMode::Directory);
+        let data = json!({"title": "Hello", "_status": "published"});
+        let status = resolve_target_status(&data, tmp.path(), &schema, None);
+        assert_eq!(status, "published");
+    }
+
+    #[test]
+    fn resolve_target_status_invalid_defaults_to_draft() {
+        let tmp = TempDir::new().unwrap();
+        let schema = test_schema(Kind::Collection, StorageMode::Directory);
+        let data = json!({"title": "Hello", "_status": "archived"});
+        let status = resolve_target_status(&data, tmp.path(), &schema, None);
+        assert_eq!(status, "draft");
+    }
+
+    #[test]
+    fn resolve_target_status_no_status_defaults_to_draft() {
+        let tmp = TempDir::new().unwrap();
+        let schema = test_schema(Kind::Collection, StorageMode::Directory);
+        let data = json!({"title": "Hello"});
+        let status = resolve_target_status(&data, tmp.path(), &schema, None);
+        assert_eq!(status, "draft");
+    }
 }

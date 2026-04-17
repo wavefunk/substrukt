@@ -7754,3 +7754,354 @@ async fn api_filter_url_encoded_value() {
     assert_eq!(body["meta"]["total"], 1);
     assert_eq!(body["data"][0]["title"], "Hello World");
 }
+
+// ── Advanced validation tests (sk-03) ─────────────────────
+
+const UNIQUE_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Slugged", "slug": "slugged", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "slug": {"type": "string", "title": "Slug", "x-substrukt-unique": true}
+    },
+    "required": ["title", "slug"]
+}"#;
+
+const PUBLISH_REQUIRED_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Articles", "slug": "pub-articles", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "summary": {"type": "string", "title": "Summary", "x-substrukt-required-if-published": true}
+    },
+    "required": ["title"]
+}"#;
+
+const CROSS_FIELD_SCHEMA: &str = r#"{
+    "x-substrukt": {
+        "title": "Events",
+        "slug": "events",
+        "storage": "directory",
+        "validate": [
+            {"rule": "after", "field": "end_date", "reference": "start_date"}
+        ]
+    },
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "start_date": {"type": "string", "title": "Start Date"},
+        "end_date": {"type": "string", "title": "End Date"}
+    },
+    "required": ["title"]
+}"#;
+
+#[tokio::test]
+async fn api_unique_constraint_rejects_duplicate() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("unique-dup").await;
+    s.create_schema(UNIQUE_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "First", "slug": "hello-world"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Second", "slug": "hello-world"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["errors"].as_array().unwrap().iter().any(|e| {
+        e["rule"].as_str() == Some("unique")
+    }));
+}
+
+#[tokio::test]
+async fn api_unique_constraint_case_insensitive() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("unique-case").await;
+    s.create_schema(UNIQUE_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    api.post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "First", "slug": "Hello"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Second", "slug": "hello"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "case-insensitive match should reject");
+}
+
+#[tokio::test]
+async fn api_unique_constraint_update_self_allowed() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("unique-self").await;
+    s.create_schema(UNIQUE_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "First", "slug": "my-slug"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = api
+        .put(s.url(&format!("/api/v1/apps/default/content/slugged/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Updated", "slug": "my-slug"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "updating self with same unique value should pass");
+}
+
+#[tokio::test]
+async fn api_required_if_published_draft_ok() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("pub-draft").await;
+    s.create_schema(PUBLISH_REQUIRED_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/pub-articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Draft Post"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED, "draft without summary should succeed");
+}
+
+#[tokio::test]
+async fn api_required_if_published_create_published_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("pub-create").await;
+    s.create_schema(PUBLISH_REQUIRED_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/pub-articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Published Post", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "published without summary should be rejected"
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["rule"].as_str() == Some("required_if_published")));
+}
+
+#[tokio::test]
+async fn api_required_if_published_publish_action_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("pub-action").await;
+    s.create_schema(PUBLISH_REQUIRED_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/pub-articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Draft Post"}))
+        .send()
+        .await
+        .unwrap();
+    let id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = api
+        .post(s.url(&format!(
+            "/api/v1/apps/default/content/pub-articles/{id}/publish"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "publishing without required summary should be rejected"
+    );
+}
+
+#[tokio::test]
+async fn api_required_if_published_publish_with_field_ok() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("pub-ok").await;
+    s.create_schema(PUBLISH_REQUIRED_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/pub-articles"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Good Post", "summary": "A summary"}))
+        .send()
+        .await
+        .unwrap();
+    let id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = api
+        .post(s.url(&format!(
+            "/api/v1/apps/default/content/pub-articles/{id}/publish"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "publishing with summary should succeed");
+}
+
+#[tokio::test]
+async fn api_cross_field_after_valid() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("cross-valid").await;
+    s.create_schema(CROSS_FIELD_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/events"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "title": "Conference",
+            "start_date": "2024-01-01",
+            "end_date": "2024-12-31"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn api_cross_field_after_invalid() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("cross-invalid").await;
+    s.create_schema(CROSS_FIELD_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/events"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "title": "Conference",
+            "start_date": "2024-12-31",
+            "end_date": "2024-01-01"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["rule"].as_str() == Some("after")));
+}
+
+#[tokio::test]
+async fn api_cross_field_missing_field_skipped() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("cross-missing").await;
+    s.create_schema(CROSS_FIELD_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/events"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "title": "Conference",
+            "start_date": "2024-01-01"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "missing end_date should skip the after rule"
+    );
+}
+
+#[tokio::test]
+async fn api_validation_error_structured_format() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("err-format").await;
+    s.create_schema(UNIQUE_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/slugged"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": 123}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = resp.json().await.unwrap();
+
+    let errors = body["errors"].as_array().unwrap();
+    assert!(!errors.is_empty());
+    let first = &errors[0];
+    assert!(first.get("path").is_some(), "error should have path field");
+    assert!(first.get("message").is_some(), "error should have message field");
+    assert!(first.get("rule").is_some(), "error should have rule field");
+}
