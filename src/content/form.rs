@@ -1255,4 +1255,37 @@ mod tests {
         );
         assert!(html.contains("Step: 5"), "should show step hint");
     }
+
+    #[test]
+    fn strip_array_indices_simple() {
+        assert_eq!(strip_array_indices("tags[0].ref"), "tags.ref");
+    }
+
+    #[test]
+    fn strip_array_indices_multiple() {
+        assert_eq!(strip_array_indices("a[0].b[1].c"), "a.b.c");
+    }
+
+    #[test]
+    fn strip_array_indices_no_brackets() {
+        assert_eq!(strip_array_indices("simple.path"), "simple.path");
+    }
+
+    #[test]
+    fn strip_array_indices_nested_deep() {
+        assert_eq!(
+            strip_array_indices("sections[3].items[0].author"),
+            "sections.items.author"
+        );
+    }
+
+    #[test]
+    fn strip_array_indices_empty() {
+        assert_eq!(strip_array_indices(""), "");
+    }
+
+    #[test]
+    fn strip_array_indices_only_index() {
+        assert_eq!(strip_array_indices("items[0]"), "items");
+    }
 }

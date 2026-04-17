@@ -2715,4 +2715,63 @@ mod tests {
         let status = resolve_target_status(&data, tmp.path(), &schema, None);
         assert_eq!(status, "draft");
     }
+
+    #[test]
+    fn find_referencing_entries_detects_reference() {
+        let tmp = TempDir::new().unwrap();
+        let schemas_dir = tmp.path().join("schemas");
+        std::fs::create_dir_all(&schemas_dir).unwrap();
+        let posts_schema = json!({
+            "x-substrukt": {"title": "Posts", "slug": "posts", "storage": "directory"},
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "author": {"type": "string", "format": "reference", "x-substrukt-reference": {"schema": "authors"}}
+            }
+        });
+        std::fs::write(
+            schemas_dir.join("posts.json"),
+            serde_json::to_string_pretty(&posts_schema).unwrap(),
+        )
+        .unwrap();
+
+        let cache = dashmap::DashMap::new();
+        cache.insert(
+            "myapp/posts/hello-world".into(),
+            json!({"title": "Hello", "author": "alice"}),
+        );
+        cache.insert(
+            "myapp/posts/other".into(),
+            json!({"title": "Other", "author": "bob"}),
+        );
+
+        let results = find_referencing_entries(&cache, &schemas_dir, "myapp", "authors", "alice");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], ("posts".to_string(), "hello-world".to_string()));
+    }
+
+    #[test]
+    fn find_referencing_entries_no_references() {
+        let tmp = TempDir::new().unwrap();
+        let schemas_dir = tmp.path().join("schemas");
+        std::fs::create_dir_all(&schemas_dir).unwrap();
+        let schema = json!({
+            "x-substrukt": {"title": "Tags", "slug": "tags", "storage": "directory"},
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"}
+            }
+        });
+        std::fs::write(
+            schemas_dir.join("tags.json"),
+            serde_json::to_string_pretty(&schema).unwrap(),
+        )
+        .unwrap();
+
+        let cache = dashmap::DashMap::new();
+        cache.insert("myapp/tags/rust".into(), json!({"name": "Rust"}));
+
+        let results = find_referencing_entries(&cache, &schemas_dir, "myapp", "authors", "alice");
+        assert!(results.is_empty());
+    }
 }

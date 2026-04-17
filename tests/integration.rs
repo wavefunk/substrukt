@@ -8176,7 +8176,10 @@ async fn api_versions_empty_history() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let versions: Vec<serde_json::Value> = resp.json().await.unwrap();
-    assert!(versions.is_empty(), "newly created entry should have no history");
+    assert!(
+        versions.is_empty(),
+        "newly created entry should have no history"
+    );
 }
 
 #[tokio::test]
@@ -8200,14 +8203,12 @@ async fn api_versions_after_update() {
         .unwrap()
         .to_string();
 
-    api.put(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .json(&serde_json::json!({"title": "Updated"}))
-    .send()
-    .await
-    .unwrap();
+    api.put(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Updated"}))
+        .send()
+        .await
+        .unwrap();
 
     let resp = api
         .get(s.url(&format!(
@@ -8246,14 +8247,12 @@ async fn api_get_specific_version() {
         .unwrap()
         .to_string();
 
-    api.put(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .json(&serde_json::json!({"title": "Updated", "body": "New body"}))
-    .send()
-    .await
-    .unwrap();
+    api.put(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Updated", "body": "New body"}))
+        .send()
+        .await
+        .unwrap();
 
     let resp = api
         .get(s.url(&format!(
@@ -8276,7 +8275,10 @@ async fn api_get_specific_version() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let data: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(data["title"], "Original", "version should contain original data");
+    assert_eq!(
+        data["title"], "Original",
+        "version should contain original data"
+    );
     assert_eq!(data["body"], "First body");
 }
 
@@ -8333,14 +8335,12 @@ async fn api_revert_restores_data_and_snapshots_current() {
         .unwrap()
         .to_string();
 
-    api.put(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .json(&serde_json::json!({"title": "Version 2", "body": "Body 2"}))
-    .send()
-    .await
-    .unwrap();
+    api.put(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Version 2", "body": "Body 2"}))
+        .send()
+        .await
+        .unwrap();
 
     let resp = api
         .get(s.url(&format!(
@@ -8374,7 +8374,10 @@ async fn api_revert_restores_data_and_snapshots_current() {
         .await
         .unwrap();
     let current: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(current["title"], "Version 1", "should be reverted to original");
+    assert_eq!(
+        current["title"], "Version 1",
+        "should be reverted to original"
+    );
     assert_eq!(current["body"], "Body 1");
 
     let resp = api
@@ -8451,14 +8454,12 @@ async fn api_revert_requires_auth() {
         .unwrap()
         .to_string();
 
-    api.put(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .json(&serde_json::json!({"title": "Updated"}))
-    .send()
-    .await
-    .unwrap();
+    api.put(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Updated"}))
+        .send()
+        .await
+        .unwrap();
 
     let resp = api
         .get(s.url(&format!(
@@ -8479,7 +8480,11 @@ async fn api_revert_requires_auth() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "revert without auth should be rejected");
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "revert without auth should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -8503,22 +8508,18 @@ async fn api_delete_entry_clears_history() {
         .unwrap()
         .to_string();
 
-    api.put(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .json(&serde_json::json!({"title": "Updated before delete"}))
-    .send()
-    .await
-    .unwrap();
+    api.put(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Updated before delete"}))
+        .send()
+        .await
+        .unwrap();
 
-    api.delete(s.url(&format!(
-        "/api/v1/apps/default/content/versioned/{id}"
-    )))
-    .bearer_auth(&token)
-    .send()
-    .await
-    .unwrap();
+    api.delete(s.url(&format!("/api/v1/apps/default/content/versioned/{id}")))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
 
     let resp = api
         .get(s.url(&format!(
@@ -8529,5 +8530,324 @@ async fn api_delete_entry_clears_history() {
         .await
         .unwrap();
     let versions: Vec<serde_json::Value> = resp.json().await.unwrap();
-    assert!(versions.is_empty(), "history should be cleared after delete");
+    assert!(
+        versions.is_empty(),
+        "history should be cleared after delete"
+    );
+}
+
+// ── Content references tests (sk-04) ─────────────────────
+
+const REF_AUTHORS_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Ref Authors", "slug": "ref-authors", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "title": "Name"},
+        "display_name": {"type": "string", "title": "Display Name"}
+    },
+    "required": ["name"]
+}"#;
+
+const REF_POSTS_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Ref Posts", "slug": "ref-posts", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "author": {"type": "string", "title": "Author", "format": "reference", "x-substrukt-reference": {"schema": "ref-authors"}}
+    },
+    "required": ["title"]
+}"#;
+
+const REF_POSTS_LABEL_FIELD_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Label Posts", "slug": "label-posts", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "author": {"type": "string", "title": "Author", "format": "reference", "x-substrukt-reference": {"schema": "ref-authors", "label_field": "display_name"}}
+    },
+    "required": ["title"]
+}"#;
+
+const REF_NESTED_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Nested Refs", "slug": "nested-refs", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "meta": {
+            "type": "object",
+            "title": "Meta",
+            "properties": {
+                "author": {"type": "string", "title": "Author", "format": "reference", "x-substrukt-reference": {"schema": "ref-authors"}}
+            }
+        }
+    },
+    "required": ["title"]
+}"#;
+
+#[tokio::test]
+async fn api_reference_resolved_in_get() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-resolve").await;
+    s.create_schema(REF_AUTHORS_SCHEMA).await;
+    s.create_schema(REF_POSTS_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/ref-authors"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Alice", "display_name": "Alice Smith", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    let author_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    api.post(s.url("/api/v1/apps/default/content/ref-posts"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "My Post", "author": author_id, "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/ref-posts?status=all&limit=10"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let post = &body["data"][0];
+    assert!(
+        post["author"].is_object(),
+        "author should be resolved to full object, got: {}",
+        post["author"]
+    );
+    assert_eq!(post["author"]["name"], "Alice");
+}
+
+#[tokio::test]
+async fn api_nested_reference_resolved() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-nested").await;
+    s.create_schema(REF_AUTHORS_SCHEMA).await;
+    s.create_schema(REF_NESTED_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/ref-authors"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Bob", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    let author_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    api.post(s.url("/api/v1/apps/default/content/nested-refs"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Nested Post", "meta": {"author": author_id}, "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/nested-refs?status=all&limit=10"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let post = &body["data"][0];
+    assert!(
+        post["meta"]["author"].is_object(),
+        "nested reference should be resolved, got: {}",
+        post["meta"]["author"]
+    );
+    assert_eq!(post["meta"]["author"]["name"], "Bob");
+}
+
+#[tokio::test]
+async fn api_delete_referenced_entry_returns_warning_header() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-delete-warn").await;
+    s.create_schema(REF_AUTHORS_SCHEMA).await;
+    s.create_schema(REF_POSTS_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/ref-authors"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Charlie", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    let author_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    api.post(s.url("/api/v1/apps/default/content/ref-posts"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Post by Charlie", "author": author_id, "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .delete(s.url(&format!(
+            "/api/v1/apps/default/content/ref-authors/{author_id}"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "delete should still succeed");
+
+    let warnings = resp
+        .headers()
+        .get("x-substrukt-warnings")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        warnings.contains("ref-posts"),
+        "warning header should mention referencing schema, got: {warnings}"
+    );
+}
+
+#[tokio::test]
+async fn api_delete_unreferenced_entry_no_warning() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-delete-clean").await;
+    s.create_schema(REF_AUTHORS_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/ref-authors"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Lonely Author", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    let author_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = api
+        .delete(s.url(&format!(
+            "/api/v1/apps/default/content/ref-authors/{author_id}"
+        )))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert!(
+        resp.headers().get("x-substrukt-warnings").is_none(),
+        "should not have warning header for unreferenced entry"
+    );
+}
+
+#[tokio::test]
+async fn api_reference_missing_target_returns_id() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-dangling").await;
+    s.create_schema(REF_AUTHORS_SCHEMA).await;
+    s.create_schema(REF_POSTS_SCHEMA).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    api.post(s.url("/api/v1/apps/default/content/ref-posts"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"title": "Orphan Post", "author": "nonexistent-author", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/ref-posts?status=all&limit=10"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let post = &body["data"][0];
+    assert_eq!(
+        post["author"], "nonexistent-author",
+        "unresolvable reference should stay as raw ID string"
+    );
+}
+
+#[tokio::test]
+async fn api_self_referencing_schema_works() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("ref-self").await;
+
+    let self_ref_schema = r#"{
+        "x-substrukt": {"title": "Categories", "slug": "categories", "storage": "directory"},
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "title": "Name"},
+            "parent": {"type": "string", "title": "Parent", "format": "reference", "x-substrukt-reference": {"schema": "categories"}}
+        },
+        "required": ["name"]
+    }"#;
+    s.create_schema(self_ref_schema).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/categories"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Root", "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let root_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let resp = api
+        .post(s.url("/api/v1/apps/default/content/categories"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"name": "Child", "parent": root_id, "_status": "published"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/categories?status=all&limit=10&sort=title"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let child = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "Child")
+        .unwrap();
+    assert!(
+        child["parent"].is_object(),
+        "self-reference should resolve to full parent object"
+    );
+    assert_eq!(child["parent"]["name"], "Root");
 }
