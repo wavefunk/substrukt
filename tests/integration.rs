@@ -8906,7 +8906,13 @@ async fn bulk_create_success() {
     assert_eq!(body["created"], 3);
     assert_eq!(body["failed"], 0);
     assert_eq!(body["results"].as_array().unwrap().len(), 3);
-    assert!(body["results"].as_array().unwrap().iter().all(|r| r["status"] == "created"));
+    assert!(
+        body["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["status"] == "created")
+    );
 
     let resp = api
         .get(s.url("/api/v1/apps/default/content/bulk-items?status=all"))
@@ -9020,8 +9026,14 @@ async fn bulk_update_success_with_snapshots() {
         .await
         .unwrap();
     let create_body: serde_json::Value = resp.json().await.unwrap();
-    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
-    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+    let id_a = create_body["results"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let id_b = create_body["results"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let resp = api
         .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/update"))
@@ -9060,7 +9072,11 @@ async fn bulk_update_success_with_snapshots() {
         .await
         .unwrap();
     let versions: Vec<serde_json::Value> = resp.json().await.unwrap();
-    assert_eq!(versions.len(), 1, "bulk update should create a version snapshot");
+    assert_eq!(
+        versions.len(),
+        1,
+        "bulk update should create a version snapshot"
+    );
 }
 
 #[tokio::test]
@@ -9084,7 +9100,12 @@ async fn bulk_update_missing_id_error() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["failed"], 1);
-    assert!(body["results"][0]["error"].as_str().unwrap().contains("_id"));
+    assert!(
+        body["results"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("_id")
+    );
 }
 
 #[tokio::test]
@@ -9110,8 +9131,14 @@ async fn bulk_delete_success() {
         .await
         .unwrap();
     let create_body: serde_json::Value = resp.json().await.unwrap();
-    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
-    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+    let id_a = create_body["results"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let id_b = create_body["results"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let resp = api
         .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/delete"))
@@ -9157,8 +9184,14 @@ async fn bulk_publish_with_validation() {
         .await
         .unwrap();
     let create_body: serde_json::Value = resp.json().await.unwrap();
-    let id_with = create_body["results"][0]["id"].as_str().unwrap().to_string();
-    let id_without = create_body["results"][1]["id"].as_str().unwrap().to_string();
+    let id_with = create_body["results"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let id_without = create_body["results"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let resp = api
         .post(s.url("/api/v1/apps/default/content/bulk-pub/_bulk/publish"))
@@ -9169,7 +9202,10 @@ async fn bulk_publish_with_validation() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(body["published"], 1, "only entry with summary should publish");
+    assert_eq!(
+        body["published"], 1,
+        "only entry with summary should publish"
+    );
     assert_eq!(body["failed"], 1, "entry without summary should fail");
 
     let results = body["results"].as_array().unwrap();
@@ -9202,8 +9238,14 @@ async fn bulk_unpublish_success() {
         .await
         .unwrap();
     let create_body: serde_json::Value = resp.json().await.unwrap();
-    let id_a = create_body["results"][0]["id"].as_str().unwrap().to_string();
-    let id_b = create_body["results"][1]["id"].as_str().unwrap().to_string();
+    let id_a = create_body["results"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let id_b = create_body["results"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let resp = api
         .post(s.url("/api/v1/apps/default/content/bulk-items/_bulk/unpublish"))
@@ -9270,4 +9312,228 @@ async fn bulk_delete_nonexistent_partial() {
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["total"], 2);
     assert!(body["deleted"].as_u64().unwrap() + body["failed"].as_u64().unwrap() == 2);
+}
+
+// ── Media management tests (sk-07) ────────────────────────
+
+async fn admin_upload_file(s: &TestServer) -> serde_json::Value {
+    let part = reqwest::multipart::Part::bytes(b"test file content".to_vec())
+        .file_name("test.txt")
+        .mime_str("text/plain")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", part);
+    let resp = s
+        .client
+        .post(s.url("/apps/default/uploads"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    resp.json().await.unwrap()
+}
+
+#[tokio::test]
+async fn media_set_focal_point() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 0.3, "y": 0.7}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["focal_x"], 0.3);
+    assert_eq!(body["focal_y"], 0.7);
+}
+
+#[tokio::test]
+async fn media_set_focal_point_boundary_values() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 0.0, "y": 0.0}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "0.0 should be valid");
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 1.0, "y": 1.0}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "1.0 should be valid");
+}
+
+#[tokio::test]
+async fn media_focal_point_out_of_range_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": -0.1, "y": 0.5}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "negative x should be rejected");
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 0.5, "y": 1.1}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "y > 1.0 should be rejected");
+}
+
+#[tokio::test]
+async fn media_reset_focal_point() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    s.client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 0.5, "y": 0.5}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = s
+        .client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": null, "y": null}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["focal_x"].is_null(), "should be reset to null");
+    assert!(body["focal_y"].is_null(), "should be reset to null");
+}
+
+#[tokio::test]
+async fn media_delete_orphaned_upload() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    let resp = s
+        .client
+        .delete(s.url(&format!("/apps/default/uploads/{hash}")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = s
+        .client
+        .get(s.url(&format!("/apps/default/uploads/file/{hash}")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND, "deleted upload file should not be accessible");
+}
+
+#[tokio::test]
+async fn media_delete_referenced_upload_rejected() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("media-del-ref").await;
+
+    let upload_schema = r#"{
+        "x-substrukt": {"title": "Media Posts", "slug": "media-posts", "storage": "directory"},
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "title": "Title"},
+            "image": {"type": "string", "format": "upload", "title": "Image"}
+        },
+        "required": ["title"]
+    }"#;
+    s.create_schema(upload_schema).await;
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+    let filename = upload["filename"].as_str().unwrap();
+
+    api.post(s.url("/api/v1/apps/default/content/media-posts"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "title": "Post with image",
+            "image": {"hash": hash, "filename": filename, "mime": "text/plain"}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = s
+        .client
+        .delete(s.url(&format!("/apps/default/uploads/{hash}")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT, "referenced upload should not be deletable");
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("referenced"));
+}
+
+#[tokio::test]
+async fn media_delete_nonexistent_upload() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let resp = s
+        .client
+        .delete(s.url("/apps/default/uploads/0000000000000000000000000000000000000000000000000000000000000000"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "deleting nonexistent should still be 204 (idempotent)");
+}
+
+#[tokio::test]
+async fn media_focal_point_persists_in_metadata() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    let token = s.create_api_token("media-focal-persist").await;
+    let upload = admin_upload_file(&s).await;
+    let hash = upload["hash"].as_str().unwrap();
+
+    s.client
+        .put(s.url(&format!("/apps/default/uploads/{hash}/focal")))
+        .json(&serde_json::json!({"x": 0.25, "y": 0.75}))
+        .send()
+        .await
+        .unwrap();
+
+    let api = Client::builder().cookie_store(false).build().unwrap();
+    let resp = api
+        .get(s.url(&format!("/api/v1/apps/default/uploads/{hash}")))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 }
