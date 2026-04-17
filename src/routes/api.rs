@@ -855,6 +855,23 @@ async fn api_publish_entry(
         }
     };
 
+    if let Ok(Some(entry)) = content::get_entry(&content_dir, &schema_file, &entry_id) {
+        let ctx = content::ValidationContext {
+            entry_id: Some(&entry_id),
+            target_status: "published",
+            cache: &state.cache,
+            app_slug: &app.app.slug,
+            schema_slug: &schema_slug,
+        };
+        if let Err(errors) = content::validate_for_publish(&schema_file, &entry.data, &ctx) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"errors": errors})),
+            )
+                .into_response();
+        }
+    }
+
     if let Err(e) = content::set_entry_status(&content_dir, &schema_file, &entry_id, "published") {
         let msg = e.to_string();
         if msg.contains("not found") {

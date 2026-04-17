@@ -74,6 +74,17 @@ fn string_constraints(schema: &Value, is_textarea: bool) -> (String, Vec<String>
         hints.push(format!("Pattern: <code>{}</code>", escape_html_attr(pat)));
     }
 
+    if schema.get("x-substrukt-unique").and_then(|v| v.as_bool()) == Some(true) {
+        hints.push("Must be unique".to_string());
+    }
+    if schema
+        .get("x-substrukt-required-if-published")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        hints.push("Required when published".to_string());
+    }
+
     if let Some(desc) = get_description(schema) {
         hints.push(desc);
     }

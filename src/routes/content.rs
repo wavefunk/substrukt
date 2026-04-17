@@ -937,6 +937,29 @@ async fn publish_entry(
         }
     };
 
+    if let Ok(Some(entry)) = content::get_entry(&content_dir, &schema_file, &entry_id) {
+        let ctx = content::ValidationContext {
+            entry_id: Some(&entry_id),
+            target_status: "published",
+            cache: &state.cache,
+            app_slug: &app.app.slug,
+            schema_slug: &schema_slug,
+        };
+        if let Err(errors) = content::validate_for_publish(&schema_file, &entry.data, &ctx) {
+            let msg = errors
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            auth::set_flash(&session, "error", &format!("Cannot publish: {msg}")).await;
+            return Redirect::to(&format!(
+                "/apps/{}/content/{schema_slug}/{entry_id}/edit",
+                app.app.slug
+            ))
+            .into_response();
+        }
+    }
+
     if let Err(e) = content::set_entry_status(&content_dir, &schema_file, &entry_id, "published") {
         tracing::error!("Publish failed: {e}");
         auth::set_flash(&session, "error", "Failed to publish entry").await;
@@ -1214,12 +1237,26 @@ async fn bulk_publish(
         _ => return Redirect::to(&format!("/apps/{}/schemas", app.app.slug)).into_response(),
     };
     let mut count = 0;
+    let mut skipped = 0;
     for id in form
         .ids
         .split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
     {
+        if let Ok(Some(entry)) = content::get_entry(&content_dir, &schema_file, id) {
+            let ctx = content::ValidationContext {
+                entry_id: Some(id),
+                target_status: "published",
+                cache: &state.cache,
+                app_slug: &app.app.slug,
+                schema_slug: &schema_slug,
+            };
+            if content::validate_for_publish(&schema_file, &entry.data, &ctx).is_err() {
+                skipped += 1;
+                continue;
+            }
+        }
         if content::set_entry_status(&content_dir, &schema_file, id, "published").is_ok() {
             crate::cache::reload_entry(
                 &state.cache,
@@ -1240,7 +1277,12 @@ async fn bulk_publish(
             count += 1;
         }
     }
-    auth::set_flash(&session, "success", &format!("{count} entries published")).await;
+    let msg = if skipped > 0 {
+        format!("{count} entries published, {skipped} skipped (missing required fields)")
+    } else {
+        format!("{count} entries published")
+    };
+    auth::set_flash(&session, "success", &msg).await;
     Redirect::to(&format!("/apps/{}/content/{schema_slug}", app.app.slug)).into_response()
 }
 
