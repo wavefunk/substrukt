@@ -791,12 +791,18 @@ async fn update_entry(
 
     // Snapshot current version for history
     if let Ok(Some(current)) = content::get_entry(&content_dir, &schema_file, &entry_id) {
+        let snap_meta = crate::history::SnapshotMeta {
+            user_id: user_id_str.clone(),
+            username: current_username.clone(),
+            source: crate::history::SnapshotSource::AdminUi,
+        };
         if let Err(e) = crate::history::snapshot_entry(
             &app_dir,
             &schema_slug,
             &entry_id,
             &current.data,
             state.config.version_history_count,
+            Some(&snap_meta),
         ) {
             tracing::warn!("Failed to snapshot version: {e}");
         }
@@ -1492,12 +1498,18 @@ async fn revert_entry(
 
     // Snapshot current before reverting
     if let Ok(Some(current)) = content::get_entry(&content_dir, &schema_file, &entry_id) {
+        let snap_meta = crate::history::SnapshotMeta {
+            user_id: user_id_str.clone(),
+            username: username_str(&user),
+            source: crate::history::SnapshotSource::Revert,
+        };
         if let Err(e) = crate::history::snapshot_entry(
             &app_dir,
             &schema_slug,
             &entry_id,
             &current.data,
             state.config.version_history_count,
+            Some(&snap_meta),
         ) {
             tracing::warn!("Failed to snapshot version: {e}");
         }

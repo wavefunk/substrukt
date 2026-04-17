@@ -570,12 +570,18 @@ async fn update_entry(
 
     // Snapshot current version for history
     if let Ok(Some(current)) = content::get_entry(&content_dir, &schema_file, &entry_id) {
+        let snap_meta = crate::history::SnapshotMeta {
+            user_id: "api".into(),
+            username: "api".into(),
+            source: crate::history::SnapshotSource::Api,
+        };
         if let Err(e) = crate::history::snapshot_entry(
             &app_dir,
             &schema_slug,
             &entry_id,
             &current.data,
             state.config.version_history_count,
+            Some(&snap_meta),
         ) {
             tracing::warn!("Failed to snapshot version: {e}");
         }
@@ -746,12 +752,18 @@ async fn upsert_single(
 
     // Snapshot current version for history
     if let Ok(Some(current)) = content::get_entry(&content_dir, &schema_file, "_single") {
+        let snap_meta = crate::history::SnapshotMeta {
+            user_id: "api".into(),
+            username: "api".into(),
+            source: crate::history::SnapshotSource::Api,
+        };
         if let Err(e) = crate::history::snapshot_entry(
             &app_dir,
             &schema_slug,
             "_single",
             &current.data,
             state.config.version_history_count,
+            Some(&snap_meta),
         ) {
             tracing::warn!("Failed to snapshot version: {e}");
         }
@@ -817,7 +829,7 @@ async fn delete_single(
     match content::delete_entry(&content_dir, &schema_file, "_single") {
         Ok(()) => {
             crate::history::delete_history(&app_dir, &schema_slug, "_single");
-            let key = format!("{}/_single/{schema_slug}", app.app.slug);
+            let key = format!("{}/{schema_slug}/_single", app.app.slug);
             state.cache.remove(&key);
             state.audit.log_with_app(
                 "api",

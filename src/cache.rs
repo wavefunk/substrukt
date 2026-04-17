@@ -161,6 +161,13 @@ pub fn spawn_watcher(
         if let Ok(event) = res
             && (event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove())
         {
+            if event
+                .paths
+                .iter()
+                .all(|p| p.to_string_lossy().contains("/_history/"))
+            {
+                return;
+            }
             let _ = tx.send(());
         }
     }) {
