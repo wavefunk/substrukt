@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     extract::{Multipart, Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::{Html, IntoResponse, Json},
+    response::{Html, IntoResponse, Json, Redirect},
     routing::get,
 };
 use axum_htmx::HxRequest;
@@ -21,6 +21,9 @@ pub fn routes() -> Router<AppState> {
         .route("/", get(list_uploads).post(upload_file))
         .route("/file/{hash}/{filename}", get(serve_upload))
         .route("/file/{hash}", get(serve_upload_no_name))
+        .route("/{hash}", axum::routing::delete(delete_upload))
+        .route("/{hash}/delete", axum::routing::post(delete_upload_post))
+        .route("/{hash}/focal", axum::routing::put(set_focal_point))
 }
 
 #[derive(serde::Deserialize)]
@@ -391,6 +394,137 @@ pub async fn serve_upload_by_hash(
 async fn serve_file(state: &AppState, app: &AppContext, hash: &str) -> axum::response::Response {
     let uploads_dir = state.config.app_uploads_dir(&app.app.slug);
     serve_upload_by_hash(state, app.app.id, &uploads_dir, hash, &HeaderMap::new()).await
+}
+
+async fn delete_upload(
+    Extension(_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    app: AppContext,
+    Path((_app_slug, hash)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let ref_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM upload_references WHERE app_id = ? AND upload_hash = ?",
+    )
+    .bind(app.app.id)
+    .bind(&hash)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or((0,));
+
+    if ref_count.0 > 0 {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": format!("Upload is referenced by {} entries", ref_count.0)})),
+        )
+            .into_response();
+    }
+
+    let uploads_dir = state.config.app_uploads_dir(&app.app.slug);
+    uploads::delete_upload_file(&uploads_dir, &hash);
+    let _ = uploads::db_delete_upload(&state.pool, app.app.id, &hash).await;
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+async fn delete_upload_post(
+    Extension(_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    session: Session,
+    app: AppContext,
+    Path((_app_slug, hash)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return Redirect::to(&format!("/apps/{}/uploads", app.app.slug)).into_response();
+    }
+
+    let ref_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM upload_references WHERE app_id = ? AND upload_hash = ?",
+    )
+    .bind(app.app.id)
+    .bind(&hash)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or((0,));
+
+    if ref_count.0 > 0 {
+        auth::set_flash(
+            &session,
+            "error",
+            &format!(
+                "Cannot delete: upload is referenced by {} entries",
+                ref_count.0
+            ),
+        )
+        .await;
+    } else {
+        let uploads_dir = state.config.app_uploads_dir(&app.app.slug);
+        uploads::delete_upload_file(&uploads_dir, &hash);
+        let _ = uploads::db_delete_upload(&state.pool, app.app.id, &hash).await;
+        auth::set_flash(&session, "success", "Upload deleted").await;
+    }
+
+    Redirect::to(&format!("/apps/{}/uploads", app.app.slug)).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct FocalPointBody {
+    x: Option<f64>,
+    y: Option<f64>,
+}
+
+async fn set_focal_point(
+    Extension(_user): Extension<allowthem_core::User>,
+    Extension(role): Extension<auth::CurrentUserRole>,
+    State(state): State<AppState>,
+    app: AppContext,
+    Path((_app_slug, hash)): Path<(String, String)>,
+    Json(body): Json<FocalPointBody>,
+) -> impl IntoResponse {
+    if !auth::has_min_role(&role.0, "editor") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Insufficient permissions"})),
+        )
+            .into_response();
+    }
+
+    if let Some(x) = body.x {
+        if !(0.0..=1.0).contains(&x) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Focal point x must be between 0.0 and 1.0"})),
+            )
+                .into_response();
+        }
+    }
+    if let Some(y) = body.y {
+        if !(0.0..=1.0).contains(&y) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Focal point y must be between 0.0 and 1.0"})),
+            )
+                .into_response();
+        }
+    }
+
+    match uploads::db_set_focal_point(&state.pool, app.app.id, &hash, body.x, body.y).await {
+        Ok(()) => Json(serde_json::json!({"status": "ok", "focal_x": body.x, "focal_y": body.y}))
+            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to set focal point: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to set focal point"})),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// Check if any value in If-None-Match matches the given ETag.

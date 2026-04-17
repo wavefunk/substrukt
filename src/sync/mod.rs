@@ -18,8 +18,19 @@ pub async fn export_bundle(
     let mut tar = tar::Builder::new(enc);
 
     // Write uploads-manifest.json from SQLite, filtered by app_id
-    let upload_rows = sqlx::query_as::<_, (String, String, String, i64, String)>(
-        "SELECT hash, filename, mime, size, created_at FROM uploads WHERE app_id = ?",
+    let upload_rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            i64,
+            String,
+            Option<f64>,
+            Option<f64>,
+        ),
+    >(
+        "SELECT hash, filename, mime, size, created_at, focal_x, focal_y FROM uploads WHERE app_id = ?",
     )
     .bind(app_id)
     .fetch_all(pool)
@@ -27,15 +38,24 @@ pub async fn export_bundle(
 
     let manifest: Vec<serde_json::Value> = upload_rows
         .iter()
-        .map(|(hash, filename, mime, size, created_at)| {
-            serde_json::json!({
-                "hash": hash,
-                "filename": filename,
-                "mime": mime,
-                "size": size,
-                "created_at": created_at,
-            })
-        })
+        .map(
+            |(hash, filename, mime, size, created_at, focal_x, focal_y)| {
+                let mut entry = serde_json::json!({
+                    "hash": hash,
+                    "filename": filename,
+                    "mime": mime,
+                    "size": size,
+                    "created_at": created_at,
+                });
+                if let Some(fx) = focal_x {
+                    entry["focal_x"] = serde_json::json!(fx);
+                }
+                if let Some(fy) = focal_y {
+                    entry["focal_y"] = serde_json::json!(fy);
+                }
+                entry
+            },
+        )
         .collect();
 
     let manifest_json = serde_json::to_string_pretty(&manifest)?;
@@ -47,11 +67,28 @@ pub async fn export_bundle(
     header.set_cksum();
     tar.append(&header, manifest_bytes)?;
 
-    let dirs = ["schemas", "content", "uploads", "_history"];
-    for dir_name in &dirs {
+    for dir_name in &["schemas", "content", "_history"] {
         let dir = app_dir.join(dir_name);
         if dir.exists() {
             tar.append_dir_all(*dir_name, &dir)?;
+        }
+    }
+
+    let uploads_dir = app_dir.join("uploads");
+    if uploads_dir.exists() {
+        for entry in std::fs::read_dir(&uploads_dir)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name == "_derived" {
+                continue;
+            }
+            let path = entry.path();
+            let tar_path = std::path::Path::new("uploads").join(&name);
+            if path.is_dir() {
+                tar.append_dir_all(&tar_path, &path)?;
+            } else {
+                tar.append_path_with_name(&path, &tar_path)?;
+            }
         }
     }
 

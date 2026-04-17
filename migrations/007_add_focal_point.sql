@@ -1,0 +1,2 @@
+ALTER TABLE uploads ADD COLUMN focal_x REAL;
+ALTER TABLE uploads ADD COLUMN focal_y REAL;

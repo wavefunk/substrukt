@@ -45,6 +45,10 @@ pub struct UploadMeta {
     pub filename: String,
     pub mime: String,
     pub size: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focal_x: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focal_y: Option<f64>,
 }
 
 /// Sanitize a filename: strip path components, replace unsafe chars.
@@ -117,6 +121,8 @@ pub async fn store_upload(
         filename: safe_filename,
         mime: mime.to_string(),
         size: data.len() as u64,
+        focal_x: None,
+        focal_y: None,
     };
     db_insert_upload(pool, app_id, &meta).await?;
 
@@ -160,20 +166,60 @@ pub async fn db_get_upload_meta(
     app_id: i64,
     hash: &str,
 ) -> eyre::Result<Option<UploadMeta>> {
-    let row = sqlx::query_as::<_, (String, String, String, i64)>(
-        "SELECT hash, filename, mime, size FROM uploads WHERE app_id = ? AND hash = ?",
+    let row = sqlx::query_as::<_, (String, String, String, i64, Option<f64>, Option<f64>)>(
+        "SELECT hash, filename, mime, size, focal_x, focal_y FROM uploads WHERE app_id = ? AND hash = ?",
     )
     .bind(app_id)
     .bind(hash)
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|(hash, filename, mime, size)| UploadMeta {
-        hash,
-        filename,
-        mime,
-        size: size as u64,
-    }))
+    Ok(row.map(
+        |(hash, filename, mime, size, focal_x, focal_y)| UploadMeta {
+            hash,
+            filename,
+            mime,
+            size: size as u64,
+            focal_x,
+            focal_y,
+        },
+    ))
+}
+
+pub async fn db_set_focal_point(
+    pool: &SqlitePool,
+    app_id: i64,
+    hash: &str,
+    focal_x: Option<f64>,
+    focal_y: Option<f64>,
+) -> eyre::Result<()> {
+    sqlx::query("UPDATE uploads SET focal_x = ?, focal_y = ? WHERE app_id = ? AND hash = ?")
+        .bind(focal_x)
+        .bind(focal_y)
+        .bind(app_id)
+        .bind(hash)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn db_delete_upload(pool: &SqlitePool, app_id: i64, hash: &str) -> eyre::Result<()> {
+    sqlx::query("DELETE FROM uploads WHERE app_id = ? AND hash = ?")
+        .bind(app_id)
+        .bind(hash)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub fn delete_upload_file(uploads_dir: &Path, hash: &str) {
+    if let Some(path) = get_upload_path(uploads_dir, hash) {
+        let _ = std::fs::remove_file(path);
+    }
+    let derived_dir = uploads_dir.join("_derived").join(hash);
+    if derived_dir.exists() {
+        let _ = std::fs::remove_dir_all(derived_dir);
+    }
 }
 
 /// Replace all upload references for a content entry.
