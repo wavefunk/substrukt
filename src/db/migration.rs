@@ -54,7 +54,11 @@ pub async fn migrate_users_to_allowthem(
         }
 
         // Old users table has no email column — generate a placeholder
-        let email_str = format!("{}@migrate.local", old_user.username);
+        let email_str = if old_user.username.contains("@") {
+            old_user.username.clone()
+        } else {
+            format!("{}@migrate.local", old_user.username)
+        };
         let email = allowthem_core::Email::new(email_str)
             .map_err(|e| eyre::eyre!("Invalid email for user {}: {e}", old_user.username))?;
 
