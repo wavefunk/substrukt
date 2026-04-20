@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.13.0
+
+### New Features
+
+- **Auth rebuild on allowthem**: User accounts, sessions, invitations, and API tokens now run on the `allowthem` library. Existing data migrates on first boot. Bearer-token API auth is app-scoped.
+- **Email sending**: Built-in SMTP sender supporting StartTLS, implicit TLS, and unencrypted relays.
+- **Password reset**: Self-service password reset flow with email-delivered tokens.
+- **Email verification**: Unverified users are hard-blocked at login with a resend flow. Invitation-based signups are implicitly verified.
+- **Advanced validation rules**: Schema-level rules (e.g. regex, bounds, cross-field constraints) enforced at publish time, with inline form hints.
+- **Content references**: Recursive reference resolution, `label_field` for display, delete warnings when removing referenced entries.
+- **Version history**: Version diff route, authorship metadata, API history endpoints, revamped history UI.
+- **Bulk operations API**: Five new bulk endpoints for publish / unpublish / delete / update / create.
+- **Media management**: Focal-point selection, upload deletion, export bundle fixes.
+- **Shared query pipeline**: API pagination, sorting, and field filtering across content endpoints.
+- **Admin UX polish**: Status filter, server-side sorting, date filtering, column sorting, schema entry counts, collapsible sidebar, array previews, unsaved-changes warnings, import confirmation.
+
+### Bug Fixes
+
+- Migrator now tolerates migrations applied by allowthem into the shared DB.
+- `sort_entries` descending order fixed.
+- Single-kind API returns an entry regardless of status.
+- Flash messages correctly consumed on edit pages.
+- Re-invite after expiry behavior pinned by tests.
+
+### Internal
+
+- 140+ new integration tests covering validation, references, history, bulk ops, media, pagination, and auth.
+- Dependency upgrade to sqlx 0.9.
+
 ## v0.12.0
 
 ### New Features
