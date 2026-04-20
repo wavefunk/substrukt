@@ -17,6 +17,7 @@ use substrukt::templates;
 struct TestServer {
     base_url: String,
     client: Client,
+    pool: sqlx::SqlitePool,
     _data_dir: tempfile::TempDir,
     _shutdown: tokio::sync::oneshot::Sender<()>,
 }
@@ -80,6 +81,7 @@ impl TestServer {
             .build_recorder()
             .handle();
 
+        let pool_for_test = pool.clone();
         let state = Arc::new(AppStateInner {
             pool,
             config,
@@ -126,6 +128,7 @@ impl TestServer {
         TestServer {
             base_url,
             client,
+            pool: pool_for_test,
             _data_dir: data_dir,
             _shutdown: tx,
         }
@@ -1708,6 +1711,60 @@ async fn duplicate_email_invitation_rejected() {
         .unwrap();
     let body = resp.text().await.unwrap();
     assert!(body.contains("already exists"));
+}
+
+#[tokio::test]
+async fn can_reinvite_after_previous_invitation_expired() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let csrf = s.get_csrf("/settings/users").await;
+    let resp = s
+        .client
+        .post(s.url("/settings/users/invite"))
+        .form(&[
+            ("email", "lapsed@example.com"),
+            ("role", "editor"),
+            ("_csrf", &csrf),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Force the invitation past its expiry without waiting 7 days.
+    let rows = sqlx::query(
+        "UPDATE allowthem_invitations SET expires_at = '2000-01-01T00:00:00.000Z' \
+         WHERE email = ?",
+    )
+    .bind("lapsed@example.com")
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.rows_affected(), 1);
+
+    // Re-invite should succeed and return a fresh signup URL.
+    let csrf = s.get_csrf("/settings/users").await;
+    let resp = s
+        .client
+        .post(s.url("/settings/users/invite"))
+        .form(&[
+            ("email", "lapsed@example.com"),
+            ("role", "editor"),
+            ("_csrf", &csrf),
+        ])
+        .send()
+        .await
+        .unwrap();
+    let body = resp.text().await.unwrap();
+    assert!(
+        !body.contains("already exists"),
+        "expired invite should not block a fresh one"
+    );
+    assert!(
+        extract_invite_url(&body).is_some(),
+        "a fresh signup URL should be issued"
+    );
 }
 
 #[tokio::test]
