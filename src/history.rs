@@ -394,7 +394,10 @@ mod tests {
         let new = json!({"_status": "published", "_id": "a", "title": "Hello"});
         let schema = test_schema();
         let diffs = diff_entries(&old, &new, &schema);
-        assert!(diffs.is_empty(), "_status and _id changes should be excluded");
+        assert!(
+            diffs.is_empty(),
+            "_status and _id changes should be excluded"
+        );
     }
 
     #[test]
@@ -441,8 +444,11 @@ mod tests {
         let new = json!({"title": "Hello"});
         let schema = test_schema();
         let diffs = diff_entries(&old, &new, &schema);
-        assert!(diffs.iter().any(|d| d.path == "legacy_field"
-            && matches!(&d.kind, DiffKind::Removed { .. })));
+        assert!(
+            diffs
+                .iter()
+                .any(|d| d.path == "legacy_field" && matches!(&d.kind, DiffKind::Removed { .. }))
+        );
     }
 
     #[test]
@@ -451,8 +457,11 @@ mod tests {
         let new = json!({"title": "Hello", "new_field": "value"});
         let schema = test_schema();
         let diffs = diff_entries(&old, &new, &schema);
-        assert!(diffs.iter().any(|d| d.path == "new_field"
-            && matches!(&d.kind, DiffKind::Added { .. })));
+        assert!(
+            diffs
+                .iter()
+                .any(|d| d.path == "new_field" && matches!(&d.kind, DiffKind::Added { .. }))
+        );
     }
 
     #[test]
@@ -611,7 +620,10 @@ mod tests {
         assert!(dir.exists());
 
         delete_history(tmp.path(), "posts", "e1");
-        assert!(!dir.exists(), "delete_history should remove entire directory");
+        assert!(
+            !dir.exists(),
+            "delete_history should remove entire directory"
+        );
     }
 
     #[test]

@@ -114,9 +114,13 @@ impl SmtpEmailSender {
 
         let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());
         let builder = match cfg.encryption {
-            SmtpEncryption::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&cfg.host)?,
+            SmtpEncryption::StartTls => {
+                AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&cfg.host)?
+            }
             SmtpEncryption::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&cfg.host)?,
-            SmtpEncryption::None => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&cfg.host),
+            SmtpEncryption::None => {
+                AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&cfg.host)
+            }
         };
 
         let transport = builder.port(cfg.port).credentials(creds).build();
@@ -142,12 +146,10 @@ impl EmailSender for SmtpEmailSender {
 
             let email = match message.html {
                 Some(html) => builder
-                    .multipart(
-                        lettre::message::MultiPart::alternative_plain_html(
-                            message.body.to_string(),
-                            html.to_string(),
-                        ),
-                    )
+                    .multipart(lettre::message::MultiPart::alternative_plain_html(
+                        message.body.to_string(),
+                        html.to_string(),
+                    ))
                     .map_err(|e| AuthError::Email(e.to_string()))?,
                 None => builder
                     .header(ContentType::TEXT_PLAIN)
@@ -263,8 +265,14 @@ mod tests {
 
     #[test]
     fn encryption_parse_accepts_aliases() {
-        assert_eq!(SmtpEncryption::parse("starttls"), Some(SmtpEncryption::StartTls));
-        assert_eq!(SmtpEncryption::parse("STARTTLS"), Some(SmtpEncryption::StartTls));
+        assert_eq!(
+            SmtpEncryption::parse("starttls"),
+            Some(SmtpEncryption::StartTls)
+        );
+        assert_eq!(
+            SmtpEncryption::parse("STARTTLS"),
+            Some(SmtpEncryption::StartTls)
+        );
         assert_eq!(SmtpEncryption::parse(""), Some(SmtpEncryption::StartTls));
         assert_eq!(SmtpEncryption::parse("tls"), Some(SmtpEncryption::Tls));
         assert_eq!(SmtpEncryption::parse("implicit"), Some(SmtpEncryption::Tls));

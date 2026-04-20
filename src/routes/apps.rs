@@ -429,7 +429,12 @@ async fn create_token(
     }
 
     // Create token via allowthem
-    match state.ath.db().create_api_token(user.id, name, None, None).await {
+    match state
+        .ath
+        .db()
+        .create_api_token(user.id, name, None, None)
+        .await
+    {
         Ok((raw_token, info)) => {
             // Hash the raw token for app_tokens lookup
             use sha2::{Digest, Sha256};
