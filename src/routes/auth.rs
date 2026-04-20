@@ -23,6 +23,9 @@ pub fn routes() -> axum::Router<AppState> {
             "/reset-password",
             get(reset_password_page).post(reset_password_submit),
         )
+        .route("/verify-email", get(verify_email))
+        .route("/verify-pending", get(verify_pending_page))
+        .route("/verify-resend", post(verify_resend))
 }
 
 #[derive(serde::Deserialize)]
@@ -114,6 +117,22 @@ async fn login_submit(
             )
             .into_response();
         }
+    }
+
+    // Hard-block unverified users. Do not create a session.
+    if !user.email_verified {
+        let csrf_token = ensure_csrf_token(&session).await;
+        return render_template(
+            &state,
+            "login.html",
+            minijinja::context! {
+                csrf_token => csrf_token,
+                username => form.username,
+                error => "Please verify your email address before logging in.",
+                show_resend => true,
+            },
+        )
+        .into_response();
     }
 
     // Create allowthem session
@@ -282,6 +301,9 @@ async fn setup_submit(
     if let Ok(Some(role)) = state.ath.db().get_role_by_name(&admin_role_name).await {
         let _ = state.ath.db().assign_role(&user.id, &role.id).await;
     }
+
+    // Bootstrap admin is auto-verified — no external mail bounce to check.
+    auto_verify(&state, user.id).await;
 
     // Mark that users exist
     state
@@ -462,6 +484,9 @@ async fn signup_submit(
     // Consume invitation (best-effort — race is unlikely, but we don't fail on it)
     let _ = state.ath.db().consume_invitation(invitation.id).await;
 
+    // Invitation flow proves email ownership (user received + clicked the link).
+    auto_verify(&state, user.id).await;
+
     // Assign role from invitation metadata (default: editor)
     let role_str = invitation.metadata.as_deref().unwrap_or("editor");
     let role_name = allowthem_core::RoleName::new(role_str);
@@ -560,7 +585,10 @@ struct ResetPasswordForm {
     confirm_password: String,
 }
 
-async fn forgot_password_page(session: Session, State(state): State<AppState>) -> impl IntoResponse {
+async fn forgot_password_page(
+    session: Session,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
     let csrf_token = ensure_csrf_token(&session).await;
     render_template(
         &state,
@@ -731,6 +759,152 @@ async fn reset_password_submit(
             render_error_page(&state, "Failed to reset password. Please try again.")
         }
     }
+}
+
+// ── Email verification ───────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct VerifyEmailQuery {
+    token: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct VerifyResendForm {
+    email: String,
+}
+
+/// Mint a verification token and immediately consume it. Used to auto-verify
+/// users whose email ownership is already established by another means
+/// (bootstrap admin, invitation flow).
+async fn auto_verify(state: &AppState, user_id: allowthem_core::UserId) {
+    let raw = match state.ath.db().create_email_verification(user_id).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("auto_verify create failed: {e}");
+            return;
+        }
+    };
+    if let Err(e) = state.ath.db().verify_email(&raw).await {
+        tracing::error!("auto_verify consume failed: {e}");
+    }
+}
+
+async fn verify_email(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<VerifyEmailQuery>,
+) -> Response {
+    let raw_token = match query.token {
+        Some(t) if !t.is_empty() => t,
+        _ => {
+            return render_template(
+                &state,
+                "verify_result.html",
+                minijinja::context! {
+                    success => false,
+                    message => "Invalid or missing verification token.",
+                },
+            )
+            .into_response();
+        }
+    };
+
+    match state.ath.db().verify_email(&raw_token).await {
+        Ok(true) => render_template(
+            &state,
+            "verify_result.html",
+            minijinja::context! {
+                success => true,
+                message => "Your email has been verified. You can now log in.",
+            },
+        )
+        .into_response(),
+        _ => render_template(
+            &state,
+            "verify_result.html",
+            minijinja::context! {
+                success => false,
+                message => "This verification link is invalid or has expired.",
+            },
+        )
+        .into_response(),
+    }
+}
+
+async fn verify_pending_page(session: Session, State(state): State<AppState>) -> impl IntoResponse {
+    let csrf_token = ensure_csrf_token(&session).await;
+    render_template(
+        &state,
+        "verify_pending.html",
+        minijinja::context! { csrf_token => csrf_token },
+    )
+}
+
+async fn verify_resend(
+    session: Session,
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Form(form): Form<VerifyResendForm>,
+) -> Response {
+    let ip = client_ip(&headers, state.config.trust_proxy_headers);
+    if !state.login_limiter.check(&ip) {
+        let csrf_token = ensure_csrf_token(&session).await;
+        return render_template(
+            &state,
+            "verify_pending.html",
+            minijinja::context! {
+                csrf_token => csrf_token,
+                error => "Too many attempts. Please try again later.",
+            },
+        )
+        .into_response();
+    }
+
+    // Silent on unknown / already-verified to avoid enumeration.
+    if let Ok(email) = allowthem_core::Email::new(form.email.trim().to_string())
+        && let Ok(user) = state.ath.db().get_user_by_email(&email).await
+        && !user.email_verified
+    {
+        match state.ath.db().create_email_verification(user.id).await {
+            Ok(raw_token) => {
+                let host = headers
+                    .get("host")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("localhost");
+                let scheme = if state.config.secure_cookies {
+                    "https"
+                } else {
+                    "http"
+                };
+                let verify_url = format!("{scheme}://{host}/verify-email?token={raw_token}");
+                let body = format!(
+                    "Please verify your Substrukt email by clicking the link below:\n\n{verify_url}\n\n\
+                     This link expires in 24 hours."
+                );
+                let html = format!(
+                    "<p>Please verify your Substrukt email address.</p>\
+                     <p><a href=\"{verify_url}\">Click here to verify</a>.</p>\
+                     <p>This link expires in 24 hours.</p>"
+                );
+                let message = allowthem_core::EmailMessage {
+                    to: email.as_str(),
+                    subject: "Verify your Substrukt email",
+                    body: &body,
+                    html: Some(&html),
+                };
+                if let Err(e) = state.email_sender.send(message).await {
+                    tracing::error!("verification email failed: {e}");
+                }
+            }
+            Err(e) => tracing::error!("create_email_verification failed: {e}"),
+        }
+    }
+
+    render_template(
+        &state,
+        "verify_pending.html",
+        minijinja::context! { sent => true },
+    )
+    .into_response()
 }
 
 fn render_template(state: &AppState, template: &str, ctx: minijinja::Value) -> Html<String> {

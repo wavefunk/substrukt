@@ -226,6 +226,9 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     let id_map = db::migration::migrate_users_to_allowthem(&pool, &ath).await?;
     db::migration::finalize_schema(&pool, &id_map).await?;
 
+    // Grandfather existing users so the hard-block login policy does not lock them out.
+    db::migration::grandfather_email_verification(&pool).await?;
+
     // Check if any users exist (for setup redirect) — after migration so migrated users count
     let has_users = !ath.db().list_users().await.unwrap_or_default().is_empty();
 

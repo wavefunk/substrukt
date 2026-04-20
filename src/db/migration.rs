@@ -157,3 +157,90 @@ pub async fn finalize_schema(
     tracing::info!("Schema migration complete");
     Ok(())
 }
+
+/// One-time grandfather migration: mark all existing allowthem users as
+/// email-verified so the new hard-block login policy does not lock them out.
+/// Idempotent: guarded by a marker row in `substrukt_grandfather`.
+pub async fn grandfather_email_verification(pool: &SqlitePool) -> eyre::Result<()> {
+    let mut conn = pool.acquire().await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS substrukt_grandfather \
+         (name TEXT PRIMARY KEY, done_at TEXT NOT NULL)",
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    let already: Option<String> =
+        sqlx::query_scalar("SELECT name FROM substrukt_grandfather WHERE name = ?")
+            .bind("email_verification")
+            .fetch_optional(&mut *conn)
+            .await?;
+    if already.is_some() {
+        return Ok(());
+    }
+
+    let updated =
+        sqlx::query("UPDATE allowthem_users SET email_verified = 1 WHERE email_verified = 0")
+            .execute(&mut *conn)
+            .await?
+            .rows_affected();
+
+    sqlx::query("INSERT INTO substrukt_grandfather (name, done_at) VALUES (?, ?)")
+        .bind("email_verification")
+        .bind(chrono::Utc::now().to_rfc3339())
+        .execute(&mut *conn)
+        .await?;
+
+    tracing::info!("Grandfathered {} existing users as email-verified", updated);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        // Minimal allowthem_users schema — only columns we touch.
+        sqlx::query(
+            "CREATE TABLE allowthem_users \
+             (id TEXT PRIMARY KEY, email_verified INTEGER NOT NULL DEFAULT 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn grandfather_is_idempotent() {
+        let pool = test_pool().await;
+        sqlx::query("INSERT INTO allowthem_users (id, email_verified) VALUES ('u1', 0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        grandfather_email_verification(&pool).await.unwrap();
+        let v: i64 = sqlx::query_scalar("SELECT email_verified FROM allowthem_users WHERE id='u1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(v, 1);
+
+        // Reset to 0 then run again — must be a no-op (marker present).
+        sqlx::query("UPDATE allowthem_users SET email_verified = 0")
+            .execute(&pool)
+            .await
+            .unwrap();
+        grandfather_email_verification(&pool).await.unwrap();
+        let v: i64 = sqlx::query_scalar("SELECT email_verified FROM allowthem_users WHERE id='u1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(v, 0, "second call must be a no-op");
+    }
+}

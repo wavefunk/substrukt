@@ -241,6 +241,9 @@ pub async fn require_auth(
         || path.starts_with("/signup")
         || path.starts_with("/forgot-password")
         || path.starts_with("/reset-password")
+        || path.starts_with("/verify-email")
+        || path.starts_with("/verify-pending")
+        || path.starts_with("/verify-resend")
         || path.starts_with("/api/")
     {
         return next.run(request).await;

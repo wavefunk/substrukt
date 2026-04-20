@@ -84,7 +84,12 @@
       <p class="text-sm text-muted mt-1">Schema-driven content management</p>
     </div>
     {% if error %}
-    <div class="bg-danger-soft text-danger p-3 rounded mb-4 text-sm" role="alert">{{ error }}</div>
+    <div class="bg-danger-soft text-danger p-3 rounded mb-4 text-sm" role="alert">
+      {{ error }}
+      {% if show_resend %}
+      <br><a href="/verify-pending" class="underline">Resend verification email</a>
+      {% endif %}
+    </div>
     {% endif %}
     <form method="post" action="/login">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">

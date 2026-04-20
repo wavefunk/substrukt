@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Email verification — Substrukt</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <style>
+    :root {
+      --surface: #f8fafc;
+      --card: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --border: #cbd5e1;
+      --accent: #f59e0b;
+      --accent-hover: #d97706;
+      --danger: #ef4444;
+      --danger-soft: #fef2f2;
+      --success: #10b981;
+      --success-soft: #ecfdf5;
+      --input-bg: #ffffff;
+    }
+    .dark {
+      --surface: #09090b;
+      --card: #18181b;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #52525b;
+      --border: #3f3f46;
+      --accent: #f59e0b;
+      --accent-hover: #fbbf24;
+      --danger: #f87171;
+      --danger-soft: #451a1a;
+      --success: #34d399;
+      --success-soft: #064e3b;
+      --input-bg: #27272a;
+    }
+    *, *::before, *::after {
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    }
+  </style>
+  <script>
+    (function() {
+      var stored = localStorage.getItem('theme');
+      if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <script src="https://cdn.twind.style" crossorigin></script>
+  <script>
+    twind.install({
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: 'var(--surface)',
+            card: 'var(--card)',
+            primary: 'var(--text-primary)',
+            secondary: 'var(--text-secondary)',
+            muted: 'var(--text-muted)',
+            accent: { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)' },
+            danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)' },
+            success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)' },
+            border: 'var(--border)',
+            'input-bg': 'var(--input-bg)',
+          }
+        }
+      }
+    });
+  </script>
+</head>
+<body class="bg-surface text-primary min-h-screen flex items-center justify-center">
+  <div class="bg-card rounded-lg shadow-lg p-8 w-full max-w-sm">
+    <div class="flex flex-col items-center mb-6">
+      <img src="/static/favicon.svg" alt="" class="w-10 h-10 mb-3">
+      <h1 class="text-2xl font-bold text-center font-mono tracking-tight">Substrukt</h1>
+    </div>
+    {% if success %}
+      <div class="bg-success-soft text-success p-3 rounded mb-4 text-sm" role="status">{{ message }}</div>
+      <a href="/login" class="block text-center w-full bg-accent text-black py-2 px-4 rounded-md hover:bg-accent-hover font-medium">Log in</a>
+    {% else %}
+      <div class="bg-danger-soft text-danger p-3 rounded mb-4 text-sm" role="alert">{{ message }}</div>
+      <a href="/verify-pending" class="block text-center w-full bg-accent text-black py-2 px-4 rounded-md hover:bg-accent-hover font-medium">Request a new link</a>
+    {% endif %}
+  </div>
+</body>
+</html>

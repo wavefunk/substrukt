@@ -356,7 +356,12 @@ async fn forgot_password_is_publicly_accessible() {
     s.setup_admin().await;
     // Log out so request is anonymous.
     let _ = s.client.get(s.url("/logout")).send().await;
-    let resp = s.client.get(s.url("/forgot-password")).send().await.unwrap();
+    let resp = s
+        .client
+        .get(s.url("/forgot-password"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.text().await.unwrap();
     assert!(body.contains("Forgot password"), "unexpected body: {body}");
@@ -438,7 +443,11 @@ async fn reset_password_end_to_end_changes_password() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "old password should be rejected");
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "old password should be rejected"
+    );
 
     // New password works.
     let csrf = s.get_csrf("/login").await;
@@ -517,6 +526,225 @@ async fn reset_password_rejects_used_token() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ── Email verification tests ─────────────────────────────────
+
+#[tokio::test]
+async fn setup_admin_is_auto_verified_and_can_login() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    // Force a clean client (no session) and log in — must succeed (verified).
+    let fresh = Client::builder()
+        .cookie_store(true)
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = fresh.get(s.url("/login")).send().await.unwrap();
+    let body = resp.text().await.unwrap();
+    let csrf = extract_csrf_token(&body).unwrap();
+    let resp = fresh
+        .post(s.url("/login"))
+        .form(&[
+            ("username", "admin"),
+            ("password", "testpassword"),
+            ("_csrf", csrf.as_str()),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(resp.headers().get("location").unwrap(), "/apps");
+}
+
+#[tokio::test]
+async fn login_hard_blocks_unverified_user() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    // Create a second user directly (bypassing signup) and force email_verified=0.
+    let email = allowthem_core::Email::new("unverified@example.com".to_string()).unwrap();
+    let username = allowthem_core::Username::new("unverified".to_string());
+    let user = s
+        .ath
+        .db()
+        .create_user(email, "testpassword", Some(username), None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE allowthem_users SET email_verified = 0 WHERE id = ?")
+        .bind(user.id)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+
+    let fresh = Client::builder()
+        .cookie_store(true)
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = fresh.get(s.url("/login")).send().await.unwrap();
+    let body = resp.text().await.unwrap();
+    let csrf = extract_csrf_token(&body).unwrap();
+    let resp = fresh
+        .post(s.url("/login"))
+        .form(&[
+            ("username", "unverified"),
+            ("password", "testpassword"),
+            ("_csrf", csrf.as_str()),
+        ])
+        .send()
+        .await
+        .unwrap();
+    // Correct credentials but blocked — rendered as 200 with error, no session.
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(
+        body.contains("verify your email"),
+        "expected verify message, got: {body}"
+    );
+    // Verify no session was issued: /apps should redirect to /login.
+    let resp = fresh.get(s.url("/apps")).send().await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(resp.headers().get("location").unwrap(), "/login");
+}
+
+#[tokio::test]
+async fn verify_email_with_valid_token_unblocks_login() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let email = allowthem_core::Email::new("pending@example.com".to_string()).unwrap();
+    let username = allowthem_core::Username::new("pending".to_string());
+    let user = s
+        .ath
+        .db()
+        .create_user(email, "testpassword", Some(username), None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE allowthem_users SET email_verified = 0 WHERE id = ?")
+        .bind(user.id)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+
+    let token = s.ath.db().create_email_verification(user.id).await.unwrap();
+    let resp = s
+        .client
+        .get(s.url(&format!("/verify-email?token={token}")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("verified"), "got: {body}");
+
+    // Now login should succeed.
+    let fresh = Client::builder()
+        .cookie_store(true)
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+    let body = fresh
+        .get(s.url("/login"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let csrf = extract_csrf_token(&body).unwrap();
+    let resp = fresh
+        .post(s.url("/login"))
+        .form(&[
+            ("username", "pending"),
+            ("password", "testpassword"),
+            ("_csrf", csrf.as_str()),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(resp.headers().get("location").unwrap(), "/apps");
+}
+
+#[tokio::test]
+async fn verify_email_rejects_invalid_token() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let resp = s
+        .client
+        .get(s.url("/verify-email?token=not-a-real-token"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(
+        body.contains("invalid") || body.contains("expired"),
+        "got: {body}"
+    );
+}
+
+#[tokio::test]
+async fn verify_resend_mints_fresh_token() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let email = allowthem_core::Email::new("needs@example.com".to_string()).unwrap();
+    let username = allowthem_core::Username::new("needs".to_string());
+    let user = s
+        .ath
+        .db()
+        .create_user(email, "testpassword", Some(username), None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE allowthem_users SET email_verified = 0 WHERE id = ?")
+        .bind(user.id)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+
+    let csrf = s.get_csrf("/verify-pending").await;
+    let resp = s
+        .client
+        .post(s.url("/verify-resend"))
+        .form(&[("email", "needs@example.com"), ("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("Check your email"), "got: {body}");
+
+    // A fresh token row should exist in the DB for this user.
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM allowthem_email_verification_tokens WHERE user_id = ?",
+    )
+    .bind(user.id)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert!(count >= 1);
+}
+
+#[tokio::test]
+async fn verify_resend_is_silent_for_unknown_email() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let csrf = s.get_csrf("/verify-pending").await;
+    let resp = s
+        .client
+        .post(s.url("/verify-resend"))
+        .form(&[("email", "ghost@example.com"), ("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("Check your email"), "got: {body}");
 }
 
 // ── Schema CRUD tests ────────────────────────────────────────
@@ -9625,7 +9853,11 @@ async fn media_focal_point_out_of_range_rejected() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "negative x should be rejected");
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "negative x should be rejected"
+    );
 
     let resp = s
         .client
@@ -9634,7 +9866,11 @@ async fn media_focal_point_out_of_range_rejected() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "y > 1.0 should be rejected");
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "y > 1.0 should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -9685,7 +9921,11 @@ async fn media_delete_orphaned_upload() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND, "deleted upload file should not be accessible");
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "deleted upload file should not be accessible"
+    );
 }
 
 #[tokio::test]
@@ -9726,7 +9966,11 @@ async fn media_delete_referenced_upload_rejected() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::CONFLICT, "referenced upload should not be deletable");
+    assert_eq!(
+        resp.status(),
+        StatusCode::CONFLICT,
+        "referenced upload should not be deletable"
+    );
     let body: serde_json::Value = resp.json().await.unwrap();
     assert!(body["error"].as_str().unwrap().contains("referenced"));
 }
@@ -9742,7 +9986,11 @@ async fn media_delete_nonexistent_upload() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "deleting nonexistent should still be 204 (idempotent)");
+    assert_eq!(
+        resp.status(),
+        StatusCode::NO_CONTENT,
+        "deleting nonexistent should still be 204 (idempotent)"
+    );
 }
 
 #[tokio::test]
