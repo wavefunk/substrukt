@@ -6,6 +6,7 @@ pub mod cache;
 pub mod config;
 pub mod content;
 pub mod db;
+pub mod email;
 pub mod history;
 pub mod metrics;
 pub mod openapi;

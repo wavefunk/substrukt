@@ -233,6 +233,10 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         allowthem_core::EmbeddedAuthClient::new(ath.clone(), "/login"),
     );
 
+    // Email sender — SMTP when env is configured, LogEmailSender otherwise.
+    let smtp_cfg = substrukt::email::SmtpConfig::from_env()?;
+    let email_sender = substrukt::email::build_sender(smtp_cfg)?;
+
     // Migrate old single-app layout to multi-app
     substrukt::migrate_single_app_layout(&config.data_dir)?;
 
@@ -288,6 +292,7 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         openapi_cache: Arc::new(std::sync::RwLock::new(None)),
         ath,
         auth_client,
+        email_sender,
         has_users: AtomicBool::new(has_users),
     });
 

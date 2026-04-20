@@ -101,6 +101,7 @@ impl TestServer {
             openapi_cache: std::sync::Arc::new(std::sync::RwLock::new(None)),
             ath,
             auth_client,
+            email_sender: std::sync::Arc::new(allowthem_core::LogEmailSender),
             has_users: std::sync::atomic::AtomicBool::new(false),
         });
 
