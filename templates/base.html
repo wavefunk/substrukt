@@ -174,8 +174,8 @@
 
           // Show file info
           info.textContent = file.name + ' (' + formatFileSize(file.size) + ', ' + (file.type || 'unknown type') + ')';
-          info.classList.remove('hidden');
-          prompt.classList.add('hidden');
+          info.classList.remove('wf-hidden');
+          prompt.classList.add('wf-hidden');
 
           // Revoke previous preview URL if any
           var prevImg = preview.querySelector('img');
@@ -190,12 +190,12 @@
             img.src = url;
             img.alt = 'Preview';
             img.dataset.objectUrl = url;
-            img.className = 'h-24 max-w-xs object-contain rounded border border-border-light';
+            img.style.cssText = 'height: 96px; max-width: 20rem; object-fit: contain; border: 1px solid var(--hairline);';
             img.onload = function() { URL.revokeObjectURL(url); };
             preview.appendChild(img);
-            preview.classList.remove('hidden');
+            preview.classList.remove('wf-hidden');
           } else {
-            preview.classList.add('hidden');
+            preview.classList.add('wf-hidden');
           }
         });
       });

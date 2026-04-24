@@ -401,8 +401,8 @@ fn render_field(
   {current_html}
   <div class="wf-dropzone" data-upload-zone>
     <div class="upload-zone-prompt wf-dropzone-title">Drag a file here or click to browse</div>
-    <div class="upload-zone-info" style="display: none; font-size: 13px; margin-top: 8px;"></div>
-    <div class="upload-zone-preview" style="display: none; margin-top: 8px; display: flex; justify-content: center;"></div>
+    <div class="upload-zone-info wf-hidden" style="font-size: 13px; margin-top: 8px;"></div>
+    <div class="upload-zone-preview wf-hidden" style="margin-top: 8px; display: flex; justify-content: center;"></div>
     <input type="file" id="{name}" name="{name}" class="wf-dropzone-input" data-upload-input{req_attr}>
   </div>
 {hint_html}</div>
