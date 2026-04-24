@@ -1,15 +1,15 @@
 {% extends base_template %}
 {% block title %}{{ schema_title }} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{{ schema_title }}</h1>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>{{ schema_title }}</h1>
   {% if user_role != "viewer" %}
   <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/new" class="wf-btn primary">New Entry</a>
   {% endif %}
 </div>
 
 {% if q or status_filter != "all" %}
-<p style="color: var(--fg-muted); font-size: 13px; margin-bottom: 16px;">Showing {{ filtered }} of {{ total }} entries{% if q %} matching "{{ q }}"{% endif %}{% if status_filter != "all" %} ({{ status_filter }}){% endif %}</p>
+<p class="wf-fg-muted wf-t-sm wf-mb-4">Showing {{ filtered }} of {{ total }} entries{% if q %} matching "{{ q }}"{% endif %}{% if status_filter != "all" %} ({{ status_filter }}){% endif %}</p>
 {% endif %}
 
 {% set base_url = "/apps/" ~ app.slug ~ "/content/" ~ schema_slug %}
@@ -18,9 +18,9 @@
 {% if status_filter != "all" %}{% set filter_params = filter_params ~ "status=" ~ status_filter ~ "&" %}{% endif %}
 
 {% if entries %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <div class="wf-filterbar">
-    <div class="wf-input-group" style="flex: 1;">
+    <div class="wf-input-group wf-grow">
       <span class="wf-input-addon">⌕</span>
       <input type="text" name="q" value="{{ q }}" placeholder="Search entries..."
         hx-get="/apps/{{ app.slug }}/content/{{ schema_slug }}" hx-trigger="input changed delay:300ms"
@@ -91,7 +91,7 @@
         {% if user_role != "viewer" %}
         <td style="width: 32px;"><input type="checkbox" class="bulk-check wf-check" value="{{ entry.id }}" onchange="updateBulkBar()"></td>
         {% endif %}
-        <td style="font-family: var(--font-mono); color: var(--fg-muted);">{{ entry.id }}</td>
+        <td class="wf-mono wf-fg-muted">{{ entry.id }}</td>
         <td>
           {% if entry.status == "published" %}
           <span class="wf-tag ok"><span class="dot"></span>Published</span>
@@ -110,12 +110,12 @@
           {%- endif -%}
         </td>
         {% endfor %}
-        <td style="text-align: right; white-space: nowrap;">
-          <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry.id }}/edit" style="color: var(--accent);">{% if user_role == "viewer" %}View{% else %}Edit{% endif %}</a>
+        <td class="wf-text-right" style="white-space: nowrap;">
+          <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry.id }}/edit">{% if user_role == "viewer" %}View{% else %}Edit{% endif %}</a>
           {% if user_role != "viewer" %}
           <form method="post" action="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry.id }}/delete" hx-boost="false" onsubmit="return confirm('Delete this entry?')" style="display: inline; margin-left: 8px;">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-            <button type="submit" style="color: var(--err); background: none; border: none; cursor: pointer; font-size: inherit;">Delete</button>
+            <button type="submit" class="wf-err" style="background: none; border: none; cursor: pointer; font-size: inherit;">Delete</button>
           </form>
           {% endif %}
         </td>
@@ -127,9 +127,9 @@
 {% if has_prev or has_next %}
 {% set sort_params = "" %}
 {% if sort_field %}{% set sort_params = sort_params ~ "sort=" ~ sort_field ~ "&order=" ~ sort_order ~ "&" %}{% endif %}
-<div class="wf-pagination" style="margin-top: 16px;">
+<div class="wf-pagination wf-mt-4">
   {% if has_prev %}<a href="{{ base_url }}?{{ filter_params }}{{ sort_params }}page={{ page - 1 }}">←</a>{% else %}<button disabled>←</button>{% endif %}
-  <span style="color: var(--fg-muted); font-size: 13px;">Page {{ page }}</span>
+  <span class="wf-fg-muted wf-t-sm">Page {{ page }}</span>
   {% if has_next %}<a href="{{ base_url }}?{{ filter_params }}{{ sort_params }}page={{ page + 1 }}">→</a>{% else %}<button disabled>→</button>{% endif %}
 </div>
 {% endif %}
@@ -137,7 +137,7 @@
 <div class="wf-empty bordered">
   <div class="wf-empty-title">{% if q %}No entries match your search{% else %}No entries yet{% endif %}</div>
   {% if not q %}
-  <div class="wf-empty-body"><a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/new" style="color: var(--accent);">Create your first entry</a>.</div>
+  <div class="wf-empty-body"><a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/new">Create your first entry</a>.</div>
   {% endif %}
 </div>
 {% endif %}

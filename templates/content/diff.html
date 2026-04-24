@@ -1,13 +1,13 @@
 {% extends base_template %}
 {% block title %}Diff — {{ schema_title }} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Comparing: {{ from_date }} vs {{ to_label }}</h1>
-  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/history" style="color: var(--fg-muted);">Back to History</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>Comparing: {{ from_date }} vs {{ to_label }}</h1>
+  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/history" class="wf-fg-muted">Back to History</a>
 </div>
 
 {% if diffs %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <table class="wf-table">
     <thead>
       <tr>
@@ -20,8 +20,8 @@
       {% for d in diffs %}
       <tr{% if d.diff_type == "changed" %} style="background: var(--accent-wash);"{% elif d.diff_type == "added" %} style="background: color-mix(in srgb, var(--ok) 10%, transparent);"{% elif d.diff_type == "removed" %} style="background: color-mix(in srgb, var(--err) 10%, transparent);"{% endif %}>
         <td style="font-weight: 500;">{{ d.label }}</td>
-        <td style="color: var(--fg-muted); font-family: var(--font-mono); word-break: break-all;">{% if d.old_val %}{{ d.old_val }}{% else %}&mdash;{% endif %}</td>
-        <td style="font-family: var(--font-mono); word-break: break-all;">{% if d.new_val %}{{ d.new_val }}{% else %}&mdash;{% endif %}</td>
+        <td class="wf-fg-muted wf-mono" style="word-break: break-all;">{% if d.old_val %}{{ d.old_val }}{% else %}&mdash;{% endif %}</td>
+        <td class="wf-mono" style="word-break: break-all;">{% if d.new_val %}{{ d.new_val }}{% else %}&mdash;{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

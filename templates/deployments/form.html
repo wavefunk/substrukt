@@ -1,13 +1,13 @@
 {% extends base_template %}
 {% block title %}{% if editing %}Edit Deployment{% else %}Create Deployment{% endif %} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{% if editing %}Edit Deployment{% else %}Create Deployment{% endif %}</h1>
-  <a href="/apps/{{ app.slug }}/deployments" style="color: var(--fg-muted);">Back to Deployments</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>{% if editing %}Edit Deployment{% else %}Create Deployment{% endif %}</h1>
+  <a href="/apps/{{ app.slug }}/deployments" class="wf-fg-muted">Back to Deployments</a>
 </div>
 
 {% if error %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ error }}</div>
 </div>
@@ -18,7 +18,7 @@
     <form method="post" action="{% if editing %}/apps/{{ app.slug }}/deployments/{{ deployment.slug }}{% else %}/apps/{{ app.slug }}/deployments/new{% endif %}">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label for="name" class="wf-label">Deployment Name</label>
         <input type="text" id="name" name="name" required
           value="{% if deployment %}{{ deployment.name }}{% endif %}"
@@ -26,16 +26,16 @@
           class="wf-input">
       </div>
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label for="slug" class="wf-label">Slug</label>
         <input type="text" id="slug" name="slug" required
           value="{% if deployment %}{{ deployment.slug }}{% endif %}"
           placeholder="e.g., production"
-          class="wf-input" style="font-family: var(--font-mono);">
-        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">Used in webhook payload and URLs. Lowercase letters, numbers, and hyphens.</p>
+          class="wf-input wf-mono">
+        <p class="wf-fg-muted wf-t-sm wf-mt-1">Used in webhook payload and URLs. Lowercase letters, numbers, and hyphens.</p>
       </div>
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label for="webhook_url" class="wf-label">Webhook URL</label>
         <input type="url" id="webhook_url" name="webhook_url" required
           value="{% if deployment %}{{ deployment.webhook_url }}{% endif %}"
@@ -43,10 +43,10 @@
           class="wf-input">
       </div>
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label for="webhook_auth_token" class="wf-label">Auth Token</label>
         {% if editing %}
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="wf-f wf-col wf-gap-2">
           <select id="token_action" name="_token_action" onchange="toggleTokenInput()"
             class="wf-select">
             <option value="keep" selected>{% if has_token %}Keep existing token{% else %}No token set{% endif %}</option>
@@ -64,20 +64,20 @@
           class="wf-input"
           placeholder="Optional">
         {% endif %}
-        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">Sent as Bearer token in webhook requests. Leave blank for no auth.</p>
+        <p class="wf-fg-muted wf-t-sm wf-mt-1">Sent as Bearer token in webhook requests. Leave blank for no auth.</p>
       </div>
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label class="wf-check-row">
           <input type="checkbox" id="include_drafts" name="include_drafts" value="on"
             {% if deployment and deployment.include_drafts %}checked{% endif %}
             class="wf-check">
           <span>Include draft content</span>
         </label>
-        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">When enabled, the webhook payload includes <code style="background: var(--bg-sunken); padding: 1px 4px; font-family: var(--font-mono);">include_drafts: true</code>.</p>
+        <p class="wf-fg-muted wf-t-sm wf-mt-1">When enabled, the webhook payload includes <code>include_drafts: true</code>.</p>
       </div>
 
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label class="wf-check-row">
           <input type="checkbox" id="auto_deploy" name="auto_deploy" value="on"
             {% if deployment and deployment.auto_deploy %}checked{% endif %}
@@ -87,15 +87,15 @@
         </label>
       </div>
 
-      <div id="debounce_group" class="wf-field {% if not deployment or not deployment.auto_deploy %}wf-hidden{% endif %}" style="margin-bottom: 20px;">
+      <div id="debounce_group" class="wf-field wf-mb-4 {% if not deployment or not deployment.auto_deploy %}wf-hidden{% endif %}">
         <label for="debounce_seconds" class="wf-label">Debounce (seconds)</label>
         <input type="number" id="debounce_seconds" name="debounce_seconds" min="10"
           value="{% if deployment %}{{ deployment.debounce_seconds }}{% else %}300{% endif %}"
           class="wf-input">
-        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">Wait this long after the last change before auto-deploying. Prevents rapid re-deploys during editing sessions.</p>
+        <p class="wf-fg-muted wf-t-sm wf-mt-1">Wait this long after the last change before auto-deploying. Prevents rapid re-deploys during editing sessions.</p>
       </div>
 
-      <div style="display: flex; gap: 12px;">
+      <div class="wf-f wf-gap-3">
         <button type="submit" class="wf-btn primary">
           {% if editing %}Save Deployment{% else %}Create Deployment{% endif %}
         </button>

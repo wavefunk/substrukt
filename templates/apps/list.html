@@ -1,21 +1,21 @@
 {% extends base_template %}
 {% block title %}Apps — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Apps</h1>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>Apps</h1>
   {% if user_role == "admin" %}
   <a href="/apps/new" class="wf-btn primary">New App</a>
   {% endif %}
 </div>
 
 {% if apps %}
-<div class="wf-grid cols-3">
+<div class="wf-grid cols-3 wf-ai-s">
   {% for app in apps %}
-  <a class="wf-card" href="/apps/{{ app.slug }}/schemas" style="text-decoration: none;">
+  <a class="wf-card" href="/apps/{{ app.slug }}/schemas">
     <div class="wf-card-title">{{ app.name }}</div>
     <div class="wf-card-body">
-      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--fg-muted); margin-bottom: 8px;">{{ app.slug }}</div>
-      <div style="font-size: 13px; color: var(--fg);">{{ app.schema_count }} schema{% if app.schema_count != 1 %}s{% endif %}</div>
+      <div class="wf-mono wf-t-sm wf-fg-muted wf-mb-2">{{ app.slug }}</div>
+      <div class="wf-t-sm">{{ app.schema_count }} schema{% if app.schema_count != 1 %}s{% endif %}</div>
     </div>
   </a>
   {% endfor %}
@@ -25,7 +25,7 @@
   {% if user_role == "admin" %}
   <div class="wf-empty-title">No apps yet</div>
   <div class="wf-empty-body">
-    <a href="/apps/new" style="color: var(--accent);">Create your first app</a>.
+    <a href="/apps/new">Create your first app</a>.
   </div>
   {% else %}
   <div class="wf-empty-title">No access</div>

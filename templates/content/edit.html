@@ -1,13 +1,13 @@
 {% extends base_template %}
 {% block title %}{% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% elif entry_title %}{{ entry_title }} — {{ schema_title }}{% else %}Edit {{ schema_title }}{% endif %} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">
-    {% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% elif entry_title %}{{ entry_title }} <span style="font-weight: 400; font-size: 16px; color: var(--fg-muted); text-transform: none; letter-spacing: 0; font-family: var(--font-sans, inherit);">({{ schema_title }})</span>{% else %}Edit {{ schema_title }}{% endif %}
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>
+    {% if is_single %}{{ schema_title }}{% elif is_new %}New {{ schema_title }}{% elif entry_title %}{{ entry_title }} <span class="wf-fg-muted wf-t-lg" style="font-weight: 400; text-transform: none; letter-spacing: 0; font-family: var(--font-sans, inherit);">({{ schema_title }})</span>{% else %}Edit {{ schema_title }}{% endif %}
     {% if not is_new %}{% include "content/_status_control.html" %}{% endif %}
   </h1>
   {% if not is_single %}
-  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}" style="color: var(--fg-muted);">Back to {{ schema_title }}</a>
+  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}" class="wf-fg-muted">Back to {{ schema_title }}</a>
   {% endif %}
 </div>
 
@@ -39,11 +39,11 @@
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     {{ form_fields|safe }}
     {% if user_role == "viewer" %}
-    <div style="color: var(--fg-muted); font-size: 13px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--hairline);">
+    <div class="wf-fg-muted wf-t-sm wf-mt-6 wf-hair" style="padding-top: 16px;">
       You have view-only access. Contact an admin to request editor permissions.
     </div>
     {% else %}
-    <div style="display: flex; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--hairline);">
+    <div class="wf-f wf-gap-3 wf-mt-6 wf-hair" style="padding-top: 16px;">
       <button type="submit" class="wf-btn primary">
         {% if is_single %}Save{% elif is_new %}Create{% else %}Save Changes{% endif %}
       </button>

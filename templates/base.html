@@ -73,9 +73,9 @@
     <aside class="wf-sidebar" id="sidebar-nav">
       {% include "_nav.html" %}
     </aside>
-    <main class="wf-main" id="main-content">
+    <main class="wf-main wf-scroll" id="main-content">
       {% if flash_kind %}
-      <div class="wf-alert {% if flash_kind == 'success' %}ok{% elif flash_kind == 'error' %}err{% else %}info{% endif %}" style="margin-bottom: 20px;">
+      <div class="wf-alert wf-mb-4 {% if flash_kind == 'success' %}ok{% elif flash_kind == 'error' %}err{% else %}info{% endif %}">
         <div class="wf-alert-bar"></div>
         <div>{{ flash_message }}</div>
       </div>

@@ -1,13 +1,13 @@
 {% extends base_template %}
 {% block title %}History — {{ schema_title }} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">History: {{ entry_id }}</h1>
-  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/edit" style="color: var(--fg-muted);">Back to Edit</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>History: {{ entry_id }}</h1>
+  <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/edit" class="wf-fg-muted">Back to Edit</a>
 </div>
 
 {% if versions %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <table class="wf-table">
     <thead>
       <tr>
@@ -21,15 +21,15 @@
     <tbody>
       {% for v in versions %}
       <tr>
-        <td style="font-family: var(--font-mono);" title="{{ v.timestamp }}">{{ v.formatted_time }}</td>
+        <td class="wf-mono" title="{{ v.timestamp }}">{{ v.formatted_time }}</td>
         <td>{{ v.username }}</td>
-        <td style="color: var(--fg-muted);">{% if v.source %}{{ v.source }}{% else %}&mdash;{% endif %}</td>
+        <td class="wf-fg-muted">{% if v.source %}{{ v.source }}{% else %}&mdash;{% endif %}</td>
         <td>{{ v.size }} bytes</td>
-        <td style="text-align: right; white-space: nowrap;">
-          <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/diff?from={{ v.timestamp }}" style="color: var(--accent);">Compare</a>
+        <td class="wf-text-right" style="white-space: nowrap;">
+          <a href="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/diff?from={{ v.timestamp }}">Compare</a>
           <form method="post" action="/apps/{{ app.slug }}/content/{{ schema_slug }}/{{ entry_id }}/revert/{{ v.timestamp }}" style="display:inline; margin-left: 8px;">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-            <button type="submit" onclick="return confirm('Revert to this version?')" style="color: var(--accent); background: none; border: none; cursor: pointer; font-size: inherit;">Revert</button>
+            <button type="submit" onclick="return confirm('Revert to this version?')" class="wf-accent" style="background: none; border: none; cursor: pointer; font-size: inherit;">Revert</button>
           </form>
         </td>
       </tr>

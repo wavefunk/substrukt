@@ -16,16 +16,16 @@
     })();
   </script>
 </head>
-<body style="background: var(--bg); color: var(--fg); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-  <div style="border: 1px solid var(--hairline); padding: 32px; width: 100%; max-width: 380px; position: relative;">
-    <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0; text-align: center;">Substrukt</h1>
-    <div style="margin-top: 24px;">
+<body class="wf-f wf-ai-c wf-jc-c" style="background: var(--bg); color: var(--fg); min-height: 100vh;">
+  <div class="wf-p-8 wf-w-full" style="border: 1px solid var(--hairline); max-width: 380px; position: relative;">
+    <h1 class="wf-text-center">Substrukt</h1>
+    <div class="wf-mt-6">
     {% if success %}
-      <div class="wf-alert ok" style="margin-bottom: 16px;"><div class="wf-alert-bar"></div><div>{{ message }}</div></div>
-      <a href="/login" class="wf-btn primary" style="width: 100%; text-align: center; text-decoration: none; display: flex;">Log in</a>
+      <div class="wf-alert ok wf-mb-4"><div class="wf-alert-bar"></div><div>{{ message }}</div></div>
+      <a href="/login" class="wf-btn primary wf-w-full wf-jc-c">Log in</a>
     {% else %}
-      <div class="wf-alert err" style="margin-bottom: 16px;"><div class="wf-alert-bar"></div><div>{{ message }}</div></div>
-      <a href="/verify-pending" class="wf-btn primary" style="width: 100%; text-align: center; text-decoration: none; display: flex;">Request a new link</a>
+      <div class="wf-alert err wf-mb-4"><div class="wf-alert-bar"></div><div>{{ message }}</div></div>
+      <a href="/verify-pending" class="wf-btn primary wf-w-full wf-jc-c">Request a new link</a>
     {% endif %}
     </div>
   </div>

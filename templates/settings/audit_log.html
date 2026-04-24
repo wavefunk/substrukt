@@ -1,9 +1,9 @@
 {% extends base_template %}
 {% block title %}Audit Log — Substrukt{% endblock %}
 {% block content %}
-<h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 24px;">Audit Log</h1>
+<h1 class="wf-mb-6">Audit Log</h1>
 
-<div class="wf-filterbar" style="margin-bottom: 20px;">
+<div class="wf-filterbar wf-mb-4">
   <select onchange="applyFilters()" id="filter-action" class="wf-select">
     <option value="">All Actions</option>
     <option value="content_create" {% if filter_action == "content_create" %}selected{% endif %}>content_create</option>
@@ -36,7 +36,7 @@
     class="wf-input" placeholder="From">
   <input type="date" id="filter-date-to" value="{{ filter_date_to }}" onchange="applyFilters()"
     class="wf-input" placeholder="To">
-  <div style="display: flex; gap: 4px;">
+  <div class="wf-f wf-gap-1">
     <button type="button" onclick="setDatePreset(0)" class="wf-btn sm">Today</button>
     <button type="button" onclick="setDatePreset(7)" class="wf-btn sm">7d</button>
     <button type="button" onclick="setDatePreset(30)" class="wf-btn sm">30d</button>
@@ -44,7 +44,7 @@
 </div>
 
 {% if entries %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <table class="wf-table">
     <thead>
       <tr>
@@ -72,7 +72,7 @@
         <td class="muted">
           {% if entry.resource_id %}{{ entry.resource_type }} / {{ entry.resource_id }}{% else %}{{ entry.resource_type }}{% endif %}
         </td>
-        <td class="muted" style="font-family: var(--font-mono); font-size: 12px;">
+        <td class="muted wf-mono wf-t-sm">
           {% if entry.details %}{% set fmt = entry.details|fmtdetails %}{{ fmt[:80] }}{% if fmt|length > 80 %}…{% endif %}{% else %}—{% endif %}
         </td>
       </tr>
@@ -81,13 +81,13 @@
   </table>
 </div>
 
-<div class="wf-pagination" style="margin-top: 16px;">
+<div class="wf-pagination wf-mt-4">
   {% if has_prev %}
   <a href="/settings/audit-log?{{ pagination_qs }}page={{ page - 1 }}">←</a>
   {% else %}
   <button disabled>←</button>
   {% endif %}
-  <span style="color: var(--fg-muted); font-size: 13px;">Page {{ page }}</span>
+  <span class="wf-fg-muted wf-t-sm">Page {{ page }}</span>
   {% if has_next %}
   <a href="/settings/audit-log?{{ pagination_qs }}page={{ page + 1 }}">→</a>
   {% else %}

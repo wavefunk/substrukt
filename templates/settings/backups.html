@@ -1,16 +1,16 @@
 {% extends base_template %}
 {% block title %}Backups — Substrukt{% endblock %}
 {% block content %}
-<h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 24px;">Backups</h1>
+<h1 class="wf-mb-6">Backups</h1>
 
 {% if flash_message %}
 {% if flash_kind == 'success' %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% elif flash_kind == 'error' %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
@@ -19,51 +19,51 @@
 
 {# ── Status banner ─────────────────────────────────────── #}
 {% if not s3_configured %}
-<div class="wf-alert info" style="margin-bottom: 20px;">
+<div class="wf-alert info wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>Backups not configured (S3 credentials missing)</div>
 </div>
 {% elif backup_running %}
-<div class="wf-alert warn" style="margin-bottom: 20px;">
+<div class="wf-alert warn wf-mb-4">
   <div class="wf-alert-bar"></div>
-  <div style="display: flex; align-items: center; gap: 8px;">
+  <div class="wf-f wf-ai-c wf-gap-2">
     <span class="wf-spinner"></span>
     Backup in progress...
   </div>
 </div>
 {% elif latest_backup and latest_backup.status == "success" %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>Last backup: {{ latest_backup.started_at[:19] }}
     {% if latest_backup.size_bytes %}({{ (latest_backup.size_bytes / 1048576)|round(1) }} MB){% endif %}
   </div>
 </div>
 {% elif latest_backup and latest_backup.status == "failed" %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>Last backup failed: {{ latest_backup.error_message }} ({{ latest_backup.started_at[:19] }})</div>
 </div>
 {% elif latest_backup and latest_backup.status == "running" %}
-<div class="wf-alert warn" style="margin-bottom: 20px;">
+<div class="wf-alert warn wf-mb-4">
   <div class="wf-alert-bar"></div>
-  <div style="display: flex; align-items: center; gap: 8px;">
+  <div class="wf-f wf-ai-c wf-gap-2">
     <span class="wf-spinner"></span>
     Backup in progress...
   </div>
 </div>
 {% else %}
-<div class="wf-alert info" style="margin-bottom: 20px;">
+<div class="wf-alert info wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>No backups yet</div>
 </div>
 {% endif %}
 
 {# ── Next scheduled backup + trigger ─────────────────── #}
-<div class="wf-panel" style="margin-bottom: 24px;">
-  <div class="wf-panel-body" style="display: flex; align-items: center; justify-content: space-between;">
+<div class="wf-panel wf-mb-6">
+  <div class="wf-panel-body wf-f wf-ai-c wf-jc-sb">
     <div>
-      <div style="font-weight: 600; color: var(--fg-strong); margin-bottom: 4px;">Next Scheduled Backup</div>
-      <p style="color: var(--fg-muted); font-size: 13px; margin: 0;">
+      <div class="wf-fg-strong wf-mb-1" style="font-weight: 600;">Next Scheduled Backup</div>
+      <p class="wf-fg-muted wf-t-sm">
         {% if not s3_configured %}
         Disabled (S3 not configured)
         {% elif not config.enabled %}
@@ -86,12 +86,12 @@
 </div>
 
 {# ── Configuration form ──────────────────────────────── #}
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">Configuration</span></div>
   <div class="wf-panel-body">
     <form method="post" action="/settings/backups">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px;">
+      <div class="wf-g wf-gap-4 wf-mb-4" style="grid-template-columns: repeat(3, 1fr);">
         <div>
           <label class="wf-check-row">
             <input type="checkbox" name="enabled" value="on" {% if config.enabled %}checked{% endif %} class="wf-check">
@@ -121,7 +121,7 @@
 </div>
 
 {# ── Credential status ───────────────────────────────── #}
-<div class="wf-panel" style="padding: 0; margin-bottom: 24px;">
+<div class="wf-panel wf-p-0 wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">S3 Credentials</span></div>
   <table class="wf-table">
     <thead>
@@ -133,12 +133,12 @@
     <tbody>
       {% for cred in credential_status %}
       <tr>
-        <td style="font-family: var(--font-mono);">{{ cred.name }}</td>
+        <td class="wf-mono">{{ cred.name }}</td>
         <td>
           {% if cred.present %}
-          <span style="color: var(--ok);">Set</span>
+          <span class="wf-ok">Set</span>
           {% else %}
-          <span style="color: var(--err);">Missing</span>
+          <span class="wf-err">Missing</span>
           {% endif %}
         </td>
       </tr>
@@ -149,7 +149,7 @@
 
 {# ── Recent backups ──────────────────────────────────── #}
 {% if history %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <div class="wf-panel-head"><span class="wf-panel-title">Recent Backups</span></div>
   <table class="wf-table">
     <thead>
@@ -164,7 +164,7 @@
     <tbody>
       {% for entry in history %}
       <tr>
-        <td class="muted" style="font-family: var(--font-mono);">{{ entry.started_at[:19] }}</td>
+        <td class="muted wf-mono">{{ entry.started_at[:19] }}</td>
         <td>
           {% if entry.status == "success" %}
           <span class="wf-tag ok"><span class="dot"></span>Success</span>
@@ -175,16 +175,16 @@
           {% endif %}
         </td>
         <td class="muted">{{ entry.trigger_source }}</td>
-        <td class="muted" style="font-family: var(--font-mono);">
+        <td class="muted wf-mono">
           {% if entry.size_bytes %}{{ (entry.size_bytes / 1048576)|round(1) }} MB{% else %}—{% endif %}
         </td>
-        <td class="muted" style="font-family: var(--font-mono); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ entry.s3_key }}">
+        <td class="muted wf-mono wf-truncate" style="max-width: 200px;" title="{{ entry.s3_key }}">
           {{ entry.s3_key if entry.s3_key else "—" }}
         </td>
       </tr>
       {% if entry.status == "failed" and entry.error_message %}
       <tr>
-        <td colspan="5" style="font-family: var(--font-mono); font-size: 12px; color: var(--err);">{{ entry.error_message }}</td>
+        <td colspan="5" class="wf-mono wf-t-sm wf-err">{{ entry.error_message }}</td>
       </tr>
       {% endif %}
       {% endfor %}

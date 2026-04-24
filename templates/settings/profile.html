@@ -1,27 +1,27 @@
 {% extends base_template %}
 {% block title %}Profile — Substrukt{% endblock %}
 {% block content %}
-<h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 24px;">Profile</h1>
+<h1 class="wf-mb-6">Profile</h1>
 
 {% if flash_message %}
 {% if flash_kind == 'success' %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% elif flash_kind == 'error' %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% endif %}
 {% endif %}
 
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">Account</span></div>
   <div class="wf-panel-body">
-    <div style="color: var(--fg-muted); font-size: 13px; margin-bottom: 4px;">Username</div>
-    <div style="color: var(--fg-strong); font-weight: 500;">{{ username }}</div>
+    <div class="wf-fg-muted wf-t-sm wf-mb-1">Username</div>
+    <div class="wf-fg-strong" style="font-weight: 500;">{{ username }}</div>
   </div>
 </div>
 

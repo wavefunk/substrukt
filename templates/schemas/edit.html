@@ -1,23 +1,23 @@
 {% extends base_template %}
 {% block title %}{% if is_new %}New Schema{% else %}Edit Schema{% endif %} — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{% if is_new %}New Schema{% else %}Edit Schema{% endif %}</h1>
-  <a href="/apps/{{ app.slug }}/schemas" style="color: var(--fg-muted);">Back to Schemas</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>{% if is_new %}New Schema{% else %}Edit Schema{% endif %}</h1>
+  <a href="/apps/{{ app.slug }}/schemas" class="wf-fg-muted">Back to Schemas</a>
 </div>
 
 {% if error %}
-<div class="wf-alert err" style="margin-bottom: 16px;"><div class="wf-alert-bar"></div><div>{{ error }}</div></div>
+<div class="wf-alert err wf-mb-4"><div class="wf-alert-bar"></div><div>{{ error }}</div></div>
 {% endif %}
 
 {% if is_new %}
-<div class="wf-accordion" style="margin-bottom: 16px;">
+<div class="wf-accordion wf-mb-4">
   <details class="wf-accordion-item">
     <summary class="wf-accordion-trigger">Schema Reference</summary>
     <div class="wf-accordion-body">
       <div>
-        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">x-substrukt fields</div>
-        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+        <div class="wf-fg-strong wf-mb-1" style="font-weight: 700;">x-substrukt fields</div>
+        <ul class="wf-fg-muted wf-t-sm" style="list-style: disc; padding-left: 16px;">
           <li><code>title</code> — Display name for the content type</li>
           <li><code>slug</code> — URL-safe identifier (auto-generated from title if omitted)</li>
           <li><code>storage</code> — <code>directory</code> (one file per entry) or <code>single-file</code> (all entries in one JSON file)</li>
@@ -25,8 +25,8 @@
         </ul>
       </div>
       <div>
-        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">Supported property types</div>
-        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+        <div class="wf-fg-strong wf-mb-1" style="font-weight: 700;">Supported property types</div>
+        <ul class="wf-fg-muted wf-t-sm" style="list-style: disc; padding-left: 16px;">
           <li><code>string</code> — text input. Add <code>"format": "textarea"</code>, <code>"markdown"</code>, <code>"upload"</code>, or <code>"reference"</code></li>
           <li><code>number</code> / <code>integer</code> — numeric input with optional min/max</li>
           <li><code>boolean</code> — checkbox</li>
@@ -36,8 +36,8 @@
         </ul>
       </div>
       <div>
-        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">Extensions</div>
-        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+        <div class="wf-fg-strong wf-mb-1" style="font-weight: 700;">Extensions</div>
+        <ul class="wf-fg-muted wf-t-sm" style="list-style: disc; padding-left: 16px;">
           <li><code>"x-control": "textarea"</code> — render string as multi-line textarea</li>
           <li><code>"x-substrukt-reference": {"schema": "slug"}</code> — reference to another content type</li>
         </ul>
@@ -52,11 +52,11 @@
     <form id="schema-form" method="post" action="{% if is_new %}/apps/{{ app.slug }}/schemas/new{% else %}/apps/{{ app.slug }}/schemas/{{ slug }}{% endif %}">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <input type="hidden" id="schema_json" name="schema_json" value="">
-      <div style="margin-bottom: 16px;">
-        <label class="wf-label" style="margin-bottom: 4px;">JSON Schema</label>
+      <div class="wf-mb-4">
+        <label class="wf-label wf-mb-1">JSON Schema</label>
         <div id="jsoneditor" style="height: 500px; border: 1px solid var(--hairline);"></div>
       </div>
-      <div style="display: flex; gap: 12px;">
+      <div class="wf-f wf-gap-3">
         <button type="submit" class="wf-btn primary">
           {% if is_new %}Create Schema{% else %}Save Changes{% endif %}
         </button>

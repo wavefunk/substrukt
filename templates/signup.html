@@ -16,37 +16,37 @@
     })();
   </script>
 </head>
-<body style="background: var(--bg); color: var(--fg); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-  <div style="border: 1px solid var(--hairline); padding: 32px; width: 100%; max-width: 380px; position: relative;">
-    <button style="position: absolute; top: 16px; right: 16px; color: var(--fg-muted); background: none; border: none; cursor: pointer;" onclick="var isLight=document.documentElement.getAttribute('data-mode')==='light';if(isLight){document.documentElement.removeAttribute('data-mode');localStorage.setItem('theme','dark')}else{document.documentElement.setAttribute('data-mode','light');localStorage.setItem('theme','light')};this.querySelector('.theme-icon').textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'">
+<body class="wf-f wf-ai-c wf-jc-c" style="background: var(--bg); color: var(--fg); min-height: 100vh;">
+  <div class="wf-p-8 wf-w-full" style="border: 1px solid var(--hairline); max-width: 380px; position: relative;">
+    <button class="wf-fg-muted" style="position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer;" onclick="var isLight=document.documentElement.getAttribute('data-mode')==='light';if(isLight){document.documentElement.removeAttribute('data-mode');localStorage.setItem('theme','dark')}else{document.documentElement.setAttribute('data-mode','light');localStorage.setItem('theme','light')};this.querySelector('.theme-icon').textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'">
       <span class="theme-icon">☀</span>
     </button>
     <script>(function(){var el=document.currentScript.previousElementSibling.querySelector('.theme-icon');el.textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'})()</script>
-    <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0; text-align: center;">Substrukt</h1>
-    <p style="color: var(--fg-muted); text-align: center; margin: 6px 0 24px; font-size: 13px;">Create your account</p>
+    <h1 class="wf-text-center">Substrukt</h1>
+    <p class="wf-fg-muted wf-text-center wf-t-sm" style="margin: 6px 0 24px;">Create your account</p>
     {% if error %}
-    <div class="wf-alert err" style="margin-bottom: 16px;"><div class="wf-alert-bar"></div><div>{{ error }}</div></div>
+    <div class="wf-alert err wf-mb-4"><div class="wf-alert-bar"></div><div>{{ error }}</div></div>
     {% endif %}
     <form method="post" action="/signup">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <input type="hidden" name="token" value="{{ token }}">
-      <div class="wf-field" style="margin-top: 16px;">
+      <div class="wf-field wf-mt-4">
         <label class="wf-label" for="email">Email</label>
-        <input class="wf-input" id="email" type="email" value="{{ email }}" readonly style="width: 100%; margin-top: 4px; cursor: not-allowed; color: var(--fg-muted);">
+        <input class="wf-input wf-w-full wf-mt-1 wf-fg-muted" id="email" type="email" value="{{ email }}" readonly style="cursor: not-allowed;">
       </div>
-      <div class="wf-field" style="margin-top: 16px;">
+      <div class="wf-field wf-mt-4">
         <label class="wf-label" for="username">Username</label>
-        <input class="wf-input" id="username" name="username" type="text" required autofocus style="width: 100%; margin-top: 4px;">
+        <input class="wf-input wf-w-full wf-mt-1" id="username" name="username" type="text" required autofocus>
       </div>
-      <div class="wf-field" style="margin-top: 16px;">
+      <div class="wf-field wf-mt-4">
         <label class="wf-label" for="password">Password</label>
-        <input class="wf-input" id="password" name="password" type="password" required minlength="8" style="width: 100%; margin-top: 4px;">
+        <input class="wf-input wf-w-full wf-mt-1" id="password" name="password" type="password" required minlength="8">
       </div>
-      <div class="wf-field" style="margin-top: 16px;">
+      <div class="wf-field wf-mt-4">
         <label class="wf-label" for="confirm_password">Confirm Password</label>
-        <input class="wf-input" id="confirm_password" name="confirm_password" type="password" required minlength="8" style="width: 100%; margin-top: 4px;">
+        <input class="wf-input wf-w-full wf-mt-1" id="confirm_password" name="confirm_password" type="password" required minlength="8">
       </div>
-      <button type="submit" class="wf-btn primary" style="width: 100%; margin-top: 18px;">
+      <button type="submit" class="wf-btn primary wf-w-full wf-mt-5">
         Create Account
       </button>
     </form>

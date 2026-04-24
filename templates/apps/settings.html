@@ -1,62 +1,62 @@
 {% extends base_template %}
 {% block title %}{{ app.name }} Settings — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{{ app.name }} — Settings</h1>
-  <a href="/apps/{{ app.slug }}/schemas" style="color: var(--fg-muted);">Back to App</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>{{ app.name }} — Settings</h1>
+  <a href="/apps/{{ app.slug }}/schemas" class="wf-fg-muted">Back to App</a>
 </div>
 
 {% if flash_kind == "token" %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
-  <div style="flex: 1;">
-    <div style="font-weight: 600; margin-bottom: 4px;">Token created! Copy it now — it won't be shown again:</div>
-    <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-      <code id="token-value" style="flex: 1; background: var(--bg-sunken); color: var(--fg-strong); padding: 8px; font-family: var(--font-mono); font-size: 13px; word-break: break-all; user-select: all;">{{ flash_message | replace("Token created: ", "") }}</code>
+  <div class="wf-grow">
+    <div style="font-weight: 600;" class="wf-mb-1">Token created! Copy it now — it won't be shown again:</div>
+    <div class="wf-f wf-ai-c wf-gap-2 wf-mt-2">
+      <code id="token-value" class="wf-grow wf-bg-sunken wf-fg-strong wf-mono wf-t-sm wf-p-2" style="word-break: break-all; user-select: all;">{{ flash_message | replace("Token created: ", "") }}</code>
       <button type="button" onclick="copyToClipboard('token-value', this)" class="wf-btn">Copy</button>
     </div>
   </div>
 </div>
 {% elif flash_kind == "success" %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% elif flash_kind == "error" %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% endif %}
 
 {# App Name #}
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">App Name</span></div>
   <div class="wf-panel-body">
-    <form method="post" action="/apps/{{ app.slug }}/settings" style="display: flex; gap: 12px;" hx-boost="false">
+    <form method="post" action="/apps/{{ app.slug }}/settings" class="wf-f wf-gap-3" hx-boost="false">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <label for="app-name" class="sr-only">App Name</label>
-      <input type="text" id="app-name" name="name" value="{{ app.name }}" required class="wf-input" style="flex: 1;">
+      <input type="text" id="app-name" name="name" value="{{ app.name }}" required class="wf-input wf-grow">
       <button type="submit" class="wf-btn primary">Update</button>
     </form>
   </div>
 </div>
 
 {# User Access #}
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">User Access</span></div>
   <div class="wf-panel-body">
-    <p style="font-size: 13px; color: var(--fg-muted); margin-bottom: 16px;">Admins always have access to all apps. Check the users below to grant non-admin users access to this app.</p>
+    <p class="wf-t-sm wf-fg-muted wf-mb-4">Admins always have access to all apps. Check the users below to grant non-admin users access to this app.</p>
     <form method="post" action="/apps/{{ app.slug }}/settings/access">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+      <div class="wf-f wf-col wf-gap-2 wf-mb-4">
         {% for user in users %}
         <label class="wf-check-row">
           <input type="checkbox" name="access" value="{{ user.id }}"
             {% if user.has_access %}checked{% endif %}
             {% if user.role == "admin" %}checked disabled{% endif %}
             class="wf-check">
-          <span style="font-size: 13px;">{{ user.username }}</span>
+          <span class="wf-t-sm">{{ user.username }}</span>
           <span class="wf-tag">{{ user.role }}</span>
         </label>
         {% endfor %}
@@ -69,12 +69,12 @@
 </div>
 
 {# API Tokens #}
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">API Tokens</span></div>
   <div class="wf-panel-body">
-    <form method="post" action="/apps/{{ app.slug }}/settings/tokens" style="display: flex; gap: 12px; margin-bottom: 16px;">
+    <form method="post" action="/apps/{{ app.slug }}/settings/tokens" class="wf-f wf-gap-3 wf-mb-4">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <input type="text" name="name" placeholder="Token name" required class="wf-input" style="flex: 1;">
+      <input type="text" name="name" placeholder="Token name" required class="wf-input wf-grow">
       <button type="submit" class="wf-btn primary">Create Token</button>
     </form>
     {% if tokens %}
@@ -91,7 +91,7 @@
         <tr>
           <td class="strong">{{ token.name }}</td>
           <td class="muted">{{ token.created_at|datefmt }}</td>
-          <td style="text-align: right;">
+          <td class="wf-text-right">
             <form method="post" action="/apps/{{ app.slug }}/settings/tokens/{{ token.id }}/delete" style="display: inline;">
               <input type="hidden" name="_csrf" value="{{ csrf_token }}">
               <button type="submit" class="wf-btn danger sm"
@@ -103,7 +103,7 @@
       </tbody>
     </table>
     {% else %}
-    <p style="color: var(--fg-muted); font-size: 13px;">No API tokens yet.</p>
+    <p class="wf-fg-muted wf-t-sm">No API tokens yet.</p>
     {% endif %}
   </div>
 </div>

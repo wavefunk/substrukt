@@ -1,15 +1,15 @@
 {% extends base_template %}
 {% block title %}Schemas — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Schemas</h1>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>Schemas</h1>
   {% if user_role == "admin" %}
   <a href="/apps/{{ app.slug }}/schemas/new" class="wf-btn primary">New Schema</a>
   {% endif %}
 </div>
 
 {% if schemas %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <table class="wf-table">
     <thead>
       <tr>
@@ -26,7 +26,7 @@
       {% for schema in schemas %}
       <tr>
         <td class="strong">
-          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" style="color: var(--accent);">{{ schema.title }}</a>
+          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}">{{ schema.title }}</a>
         </td>
         <td>{{ schema.slug }}</td>
         <td>{{ schema.storage }}</td>
@@ -35,17 +35,17 @@
         <td>
           {% if schema.is_single %}
             {% if schema.entry_count > 0 %}
-            <span style="color: var(--ok);">Exists</span>
+            <span class="wf-ok">Exists</span>
             {% else %}
-            <span style="color: var(--fg-muted);">Empty</span>
+            <span class="wf-fg-muted">Empty</span>
             {% endif %}
           {% else %}
-          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" style="color: var(--accent);">{{ schema.entry_count }}</a>
+          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}">{{ schema.entry_count }}</a>
           {% endif %}
         </td>
         {% if user_role == "admin" %}
-        <td style="text-align: right;">
-          <a href="/apps/{{ app.slug }}/schemas/{{ schema.slug }}/edit" style="color: var(--fg-muted);">Edit</a>
+        <td class="wf-text-right">
+          <a href="/apps/{{ app.slug }}/schemas/{{ schema.slug }}/edit" class="wf-fg-muted">Edit</a>
         </td>
         {% else %}
         <td></td>
@@ -60,7 +60,7 @@
   <div class="wf-empty-title">No schemas yet</div>
   <div class="wf-empty-body">
     {% if user_role == "admin" %}
-    <a href="/apps/{{ app.slug }}/schemas/new" style="color: var(--accent);">Create your first schema</a>.
+    <a href="/apps/{{ app.slug }}/schemas/new">Create your first schema</a>.
     {% else %}
     No schemas have been created for this app.
     {% endif %}

@@ -1,22 +1,22 @@
 {% extends base_template %}
 {% block title %}Deployments — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Deployments</h1>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>Deployments</h1>
   {% if user_role == "admin" %}
   <a href="/apps/{{ app.slug }}/deployments/new" class="wf-btn primary">Create Deployment</a>
   {% endif %}
 </div>
 
 {% if flash_message %}
-<div class="wf-alert {% if flash_kind == 'success' %}ok{% else %}err{% endif %}" style="margin-bottom: 20px;">
+<div class="wf-alert wf-mb-4 {% if flash_kind == 'success' %}ok{% else %}err{% endif %}">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% endif %}
 
 {% if deployments %}
-<div class="wf-panel" style="padding: 0; margin-bottom: 32px;">
+<div class="wf-panel wf-p-0 wf-mb-8">
   <table class="wf-table">
     <thead>
       <tr>
@@ -26,7 +26,7 @@
         <th>Mode</th>
         <th>Drafts</th>
         <th>Last Fired</th>
-        <th style="text-align: right;">Actions</th>
+        <th class="wf-text-right">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -37,7 +37,7 @@
             title="{% if dep.is_dirty %}Changes pending{% else %}Up to date{% endif %}"></span>
         </td>
         <td style="font-weight: 600;">{{ dep.name }}</td>
-        <td style="color: var(--fg-muted); font-family: var(--font-mono); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ dep.webhook_url }}">
+        <td class="wf-fg-muted wf-mono wf-truncate" style="max-width: 240px;" title="{{ dep.webhook_url }}">
           {{ dep.webhook_url[:40] }}{% if dep.webhook_url|length > 40 %}...{% endif %}
         </td>
         <td>
@@ -51,24 +51,24 @@
           {% if dep.include_drafts %}
           <span class="wf-tag accent">Yes</span>
           {% else %}
-          <span style="color: var(--fg-muted); font-size: 12px;">No</span>
+          <span class="wf-fg-muted wf-t-sm">No</span>
           {% endif %}
         </td>
-        <td style="color: var(--fg-muted); font-family: var(--font-mono);">
+        <td class="wf-fg-muted wf-mono">
           {% if dep.last_fired %}{{ dep.last_fired|datefmt }}{% else %}Never{% endif %}
         </td>
-        <td style="text-align: right;">
-          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+        <td class="wf-text-right">
+          <div class="wf-f wf-ai-c wf-jc-e wf-gap-2">
             <form method="post" action="/apps/{{ app.slug }}/deployments/{{ dep.slug }}/fire" style="display: inline;">
               <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-              <button type="submit" style="color: var(--accent); background: none; border: none; cursor: pointer;">Fire</button>
+              <button type="submit" class="wf-accent" style="background: none; border: none; cursor: pointer;">Fire</button>
             </form>
             {% if user_role == "admin" %}
-            <a href="/apps/{{ app.slug }}/deployments/{{ dep.slug }}/edit" style="color: var(--fg-muted);">Edit</a>
+            <a href="/apps/{{ app.slug }}/deployments/{{ dep.slug }}/edit" class="wf-fg-muted">Edit</a>
             <form method="post" action="/apps/{{ app.slug }}/deployments/{{ dep.slug }}/delete" style="display: inline;"
               onsubmit="return confirm('Delete deployment {{ dep.name }}?')">
               <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-              <button type="submit" style="color: var(--err); background: none; border: none; cursor: pointer;">Delete</button>
+              <button type="submit" class="wf-err" style="background: none; border: none; cursor: pointer;">Delete</button>
             </form>
             {% endif %}
           </div>
@@ -79,15 +79,15 @@
   </table>
 </div>
 {% else %}
-<div class="wf-empty bordered" style="margin-bottom: 32px;">
+<div class="wf-empty bordered wf-mb-8">
   <div class="wf-empty-title">No deployments configured</div>
   <div class="wf-empty-body">Create one to start deploying.</div>
 </div>
 {% endif %}
 
 {% if history %}
-<h2 style="font-family: var(--font-mono); font-weight: 700; font-size: 20px; text-transform: uppercase; color: var(--fg-strong); margin-bottom: 16px;">Webhook History</h2>
-<div class="wf-panel" style="padding: 0;">
+<h2 class="wf-mb-4">Webhook History</h2>
+<div class="wf-panel wf-p-0">
   <table class="wf-table">
     <thead>
       <tr>
@@ -103,11 +103,11 @@
     <tbody>
       {% for entry in history %}
       <tr>
-        <td style="color: var(--fg-muted);">{{ entry.created_at|datefmt }}</td>
+        <td class="wf-fg-muted">{{ entry.created_at|datefmt }}</td>
         <td>
           <span class="wf-tag accent">{{ entry.deployment_name }}</span>
         </td>
-        <td style="color: var(--fg-muted);">{{ entry.trigger_source }}</td>
+        <td class="wf-fg-muted">{{ entry.trigger_source }}</td>
         <td>
           {% if entry.status == "success" %}
           <span class="wf-tag ok"><span class="dot"></span>Success</span>
@@ -115,19 +115,19 @@
           <span class="wf-tag err"><span class="dot"></span>Failed</span>
           {% endif %}
         </td>
-        <td style="color: var(--fg-muted); font-family: var(--font-mono);">{{ entry.http_status if entry.http_status else "—" }}</td>
-        <td style="color: var(--fg-muted); font-family: var(--font-mono);">{{ entry.response_time_ms if entry.response_time_ms else "—" }}</td>
+        <td class="wf-fg-muted wf-mono">{{ entry.http_status if entry.http_status else "—" }}</td>
+        <td class="wf-fg-muted wf-mono">{{ entry.response_time_ms if entry.response_time_ms else "—" }}</td>
         <td>
           {% if entry.attempt_count > 1 %}
           <span class="wf-tag">{{ entry.attempt_count }} attempts</span>
           {% else %}
-          <span style="color: var(--fg-muted); font-size: 12px;">1</span>
+          <span class="wf-fg-muted wf-t-sm">1</span>
           {% endif %}
         </td>
       </tr>
       {% if entry.status == "failed" and entry.error_message %}
       <tr>
-        <td colspan="7" style="color: var(--err); font-family: var(--font-mono); font-size: 12px;">{{ entry.error_message }}</td>
+        <td colspan="7" class="wf-err wf-mono wf-t-sm">{{ entry.error_message }}</td>
       </tr>
       {% endif %}
       {% endfor %}

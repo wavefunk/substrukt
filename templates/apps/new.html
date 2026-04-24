@@ -1,23 +1,23 @@
 {% extends base_template %}
 {% block title %}New App — Substrukt{% endblock %}
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">New App</h1>
-  <a href="/apps" style="color: var(--fg-muted);">Back to Apps</a>
+<div class="wf-f wf-ai-c wf-jc-sb wf-mb-6">
+  <h1>New App</h1>
+  <a href="/apps" class="wf-fg-muted">Back to Apps</a>
 </div>
 
 <div class="wf-panel" style="max-width: 520px;">
   <div class="wf-panel-body">
     <form method="post" action="/apps">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <div class="wf-field" style="margin-bottom: 20px;">
+      <div class="wf-field wf-mb-4">
         <label for="name" class="wf-label">App Name</label>
         <input type="text" id="name" name="name" required placeholder="My App" class="wf-input">
       </div>
-      <div class="wf-field" style="margin-bottom: 24px;">
+      <div class="wf-field wf-mb-6">
         <label for="slug" class="wf-label">Slug</label>
-        <input type="text" id="slug" name="slug" required placeholder="my-app" class="wf-input" style="font-family: var(--font-mono);">
-        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">Lowercase letters, numbers, and hyphens. Used in URLs and file paths.</p>
+        <input type="text" id="slug" name="slug" required placeholder="my-app" class="wf-input wf-mono">
+        <p class="wf-fg-muted wf-t-sm wf-mt-1">Lowercase letters, numbers, and hyphens. Used in URLs and file paths.</p>
       </div>
       <button type="submit" class="wf-btn primary">Create App</button>
     </form>

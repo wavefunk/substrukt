@@ -1,16 +1,16 @@
 {% extends base_template %}
 {% block title %}Users — Substrukt{% endblock %}
 {% block content %}
-<h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 24px;">Users</h1>
+<h1 class="wf-mb-6">Users</h1>
 
 {% if flash_message %}
 {% if flash_kind == 'success' %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
 {% elif flash_kind == 'error' %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ flash_message }}</div>
 </div>
@@ -18,12 +18,12 @@
 {% endif %}
 
 {% if invite_url %}
-<div class="wf-alert ok" style="margin-bottom: 20px;">
+<div class="wf-alert ok wf-mb-4">
   <div class="wf-alert-bar"></div>
-  <div style="flex: 1;">
-    <div style="font-weight: 600; margin-bottom: 4px;">Invitation created! Share this link with the user:</div>
-    <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-      <code id="invite-url-value" style="flex: 1; background: var(--bg-sunken); color: var(--fg-strong); padding: 8px; font-family: var(--font-mono); font-size: 13px; word-break: break-all; user-select: all;">{{ invite_url }}</code>
+  <div class="wf-grow">
+    <div style="font-weight: 600;" class="wf-mb-1">Invitation created! Share this link with the user:</div>
+    <div class="wf-f wf-ai-c wf-gap-2 wf-mt-2">
+      <code id="invite-url-value" class="wf-grow wf-bg-sunken wf-fg-strong wf-mono wf-t-sm wf-p-2" style="word-break: break-all; user-select: all;">{{ invite_url }}</code>
       <button type="button" onclick="copyToClipboard('invite-url-value', this)" class="wf-btn">Copy</button>
     </div>
   </div>
@@ -31,13 +31,13 @@
 {% endif %}
 
 {% if error %}
-<div class="wf-alert err" style="margin-bottom: 20px;">
+<div class="wf-alert err wf-mb-4">
   <div class="wf-alert-bar"></div>
   <div>{{ error }}</div>
 </div>
 {% endif %}
 
-<div class="wf-panel" style="padding: 0; margin-bottom: 24px;">
+<div class="wf-panel wf-p-0 wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">Registered Users</span></div>
   {% if users %}
   <table class="wf-table">
@@ -52,7 +52,7 @@
     <tbody>
       {% for u in users %}
       <tr>
-        <td class="strong">{{ u.username }}{% if u.username == current_username %} <span style="color: var(--fg-muted); font-size: 12px;">(you)</span>{% endif %}</td>
+        <td class="strong">{{ u.username }}{% if u.username == current_username %} <span class="wf-fg-muted wf-t-sm">(you)</span>{% endif %}</td>
         <td>
           {% if u.username != current_username %}
           <form method="post" action="/settings/users/{{ u.id }}/role" style="display: inline;">
@@ -74,12 +74,12 @@
           {% endif %}
         </td>
         <td class="muted">{{ u.created_at|datefmt }}</td>
-        <td style="text-align: right;">
+        <td class="wf-text-right">
           {% if u.username != current_username %}
           <form method="post" action="/settings/users/{{ u.id }}/delete" style="display: inline;"
             onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-            <button type="submit" style="color: var(--err); background: none; border: none; cursor: pointer;">Delete</button>
+            <button type="submit" class="wf-err" style="background: none; border: none; cursor: pointer;">Delete</button>
           </form>
           {% endif %}
         </td>
@@ -94,12 +94,12 @@
   {% endif %}
 </div>
 
-<div class="wf-panel" style="margin-bottom: 24px;">
+<div class="wf-panel wf-mb-6">
   <div class="wf-panel-head"><span class="wf-panel-title">Invite User</span></div>
   <div class="wf-panel-body">
-    <form method="post" action="/settings/users/invite" style="display: flex; gap: 12px;">
+    <form method="post" action="/settings/users/invite" class="wf-f wf-gap-3">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <input type="email" name="email" placeholder="Email address" required class="wf-input" style="flex: 1;">
+      <input type="email" name="email" placeholder="Email address" required class="wf-input wf-grow">
       <select name="role" aria-label="Role" class="wf-select">
         <option value="editor">Editor</option>
         <option value="viewer">Viewer</option>
@@ -111,7 +111,7 @@
 </div>
 
 {% if invitations %}
-<div class="wf-panel" style="padding: 0;">
+<div class="wf-panel wf-p-0">
   <div class="wf-panel-head"><span class="wf-panel-title">Pending Invitations</span></div>
   <table class="wf-table">
     <thead>
@@ -138,10 +138,10 @@
         </td>
         <td class="muted">{{ inv.created_at|datefmt }}</td>
         <td class="muted">{{ inv.expires_at|datefmt }}</td>
-        <td style="text-align: right;">
+        <td class="wf-text-right">
           <form method="post" action="/settings/users/invitations/{{ inv.id }}/delete" style="display: inline;">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-            <button type="submit" style="color: var(--err); background: none; border: none; cursor: pointer;"
+            <button type="submit" class="wf-err" style="background: none; border: none; cursor: pointer;"
               onclick="return confirm('Revoke this invitation?')">Revoke</button>
           </form>
         </td>

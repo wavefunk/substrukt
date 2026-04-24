@@ -27,5 +27,5 @@
   height: 100vh;
 }
 .wf-shell > .wf-sidebar { grid-area: side; }
-.wf-shell > .wf-main { grid-area: main; overflow: auto; padding: 28px 32px; }
+.wf-shell > .wf-main { grid-area: main; }
 .wf-shell > .wf-modeline { grid-area: ml; }
