@@ -1,0 +1,231 @@
+/* ============================================================================
+   Wave Funk — 01-tokens.css
+   Design tokens only. No selectors beyond :root and data-mode.
+   Every other file pulls from here.
+   ============================================================================ */
+
+/* 0. Font imports ----------------------------------------------------------
+   Martian Grotesk  — self-hosted variable WOFF2 (body + display)
+   Martian Mono     — self-hosted variable WOFF2 (code / mono)
+   -------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Martian Mono";
+  font-display: swap;
+  src: url("./fonts/MartianMono-VF.woff2") format("woff2-variations"),
+       url("./fonts/MartianMono-VF.woff2") format("woff2");
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Martian Grotesk";
+  font-display: swap;
+  src: url("./fonts/MartianGrotesk-VF.woff2") format("woff2-variations"),
+       url("./fonts/MartianGrotesk-VF.woff2") format("woff2");
+  font-weight: 100 1000;  /* Th 100 · xLt 200 · Lt 300 · Rg 400 · Md 500 · Bd 700 · xBd 800 · Bl 900 · Ult 1000 */
+  font-stretch: 75% 200%; /* Cn 75% · Nr 87.5% · Std 100% · sWd 112.5% · Wd 125% · xWd 150% · uWd 200%       */
+  font-style: normal;
+}
+
+/* 1. Fonts ----------------------------------------------------------------- */
+:root {
+  --font-body:    "Martian Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Martian Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Martian Mono", ui-monospace, SFMono-Regular, "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+}
+
+/* 2. Dark mode (default) --------------------------------------------------- */
+:root {
+  /* Grayscale ink ramp — all chroma comes from --accent. */
+  --ink-000: #000000;
+  --ink-050: #0a0a0a;
+  --ink-100: #121212;
+  --ink-200: #1a1a1a;
+  --ink-300: #242424;
+  --ink-400: #333333;
+  --ink-500: #555555;
+  --ink-600: #7a7a7a;
+  --ink-700: #a8a8a8;
+  --ink-800: #d4d4d4;
+  --ink-900: #f2f2f2;
+  --ink-999: #ffffff;
+
+  --bg:           var(--ink-050);
+  --bg-raised:    var(--ink-100);
+  --bg-sunken:    var(--ink-000);
+  --bg-hover:     var(--ink-300);
+  --bg-active:    var(--ink-400);
+  --bg-splash:    var(--bg-sunken);
+
+  --fg:           var(--ink-900);
+  --fg-strong:    var(--ink-999);
+  --fg-muted:     var(--ink-700);
+  --fg-faint:     var(--ink-600);
+  --fg-disabled:  var(--ink-500);
+
+  --hairline:       var(--ink-500);
+  --hairline-dim:   var(--ink-400);
+  --hairline-loud:  var(--ink-700);
+  --hairline-focus: var(--ink-999);
+
+  /* Accent — single slot. Override --accent on <html> or subtree. */
+  --accent:       #cba6f7;
+  --accent-ink:   #000000;
+  --accent-dim:   color-mix(in oklab, var(--accent) 55%, var(--ink-000));
+  --accent-wash:  color-mix(in oklab, var(--accent) 14%, var(--ink-000));
+  --accent-hover: color-mix(in oklab, var(--accent) 82%, #ffffff);
+  --accent-press: color-mix(in oklab, var(--accent) 70%, #000000);
+
+  --accent-secondary:     var(--accent);
+  --accent-secondary-ink: var(--accent-ink);
+
+  /* Semantic status — pastel defaults on dark. */
+  --ok:   #a6e3a1;
+  --warn: #f9e2af;
+  --err:  #f38ba8;
+  --info: #74c7ec;
+
+  /* Neo-brutal offset shadows — hard edge, no blur. */
+  --shadow-sm:        2px 2px 0 0 var(--fg-strong);
+  --shadow-md:        4px 4px 0 0 var(--fg-strong);
+  --shadow-accent-sm: 2px 2px 0 0 var(--accent);
+  --shadow-accent-md: 4px 4px 0 0 var(--accent);
+
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+  /* Type scale — modular 1.2, mono-only. */
+  --fs-xs:   12px;
+  --fs-sm:   14px;
+  --fs-base: 15px;
+  --fs-md:   17px;
+  --fs-lg:   20px;
+  --fs-xl:   24px;
+  --fs-2xl:  32px;
+  --fs-3xl:  44px;
+  --fs-4xl:  64px;
+  --fs-5xl:  88px;
+  --fs-6xl:  120px;
+
+  --lh-tight: 1.05;
+  --lh-snug:  1.2;
+  --lh-body:  1.55;
+  --lh-loose: 1.7;
+
+  --tr-tight: -0.02em;
+  --tr-norm:   0em;
+  --tr-wide:   0.04em;
+  --tr-caps:   0.08em;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-bold:    700;
+  --fw-black:   800;
+
+  /* Spacing + geometry. */
+  --space-0:  0px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+  --space-10: 128px;
+
+  --radius:   0px;
+  --border-1: 1px;
+  --border-2: 2px;
+
+  --hit:    44px;
+  --hit-sm: 32px;
+  --hit-lg: 56px;
+
+  --content-w: 72ch;
+  --page-w:    1280px;
+
+  /* Motion — snap + tiny jitter. */
+  --dur-instant: 0ms;
+  --dur-snap:    80ms;
+  --dur-quick:   140ms;
+  --ease-snap:   cubic-bezier(0.2, 0.9, 0.1, 1);
+  --press-offset: 1px;
+
+  /* Z-index ladder. */
+  --z-sticky:   10;
+  --z-dropdown: 40;
+  --z-overlay:  80;
+  --z-modal:    90;
+  --z-toast:    100;
+}
+
+/* 3. Light mode — [data-mode="light"] ------------------------------------- */
+[data-mode="light"] {
+  --ink-000: #ffffff;
+  --ink-050: #f7f5f2;
+  --ink-100: #efece7;
+  --ink-200: #e6e2dc;
+  --ink-300: #d9d4cc;
+  --ink-400: #c2bdb3;
+  --ink-500: #8a857f;
+  --ink-600: #5e5a55;
+  --ink-700: #3a3733;
+  --ink-800: #1f1d1a;
+  --ink-900: #0a0908;
+  --ink-999: #000000;
+
+  --bg:           var(--ink-050);
+  --bg-raised:    var(--ink-000);
+  --bg-sunken:    var(--ink-100);
+  --bg-hover:     var(--ink-200);
+  --bg-active:    var(--ink-300);
+  --bg-splash:    var(--accent-wash);
+
+  --fg:           var(--ink-800);
+  --fg-strong:    var(--ink-999);
+  --fg-muted:     var(--ink-700);
+  --fg-faint:     var(--ink-600);
+  --fg-disabled:  var(--ink-500);
+
+  --hairline:       var(--ink-400);
+  --hairline-dim:   var(--ink-300);
+  --hairline-loud:  var(--ink-600);
+  --hairline-focus: var(--ink-999);
+
+  --accent:       #8839ef;
+  --accent-ink:   #ffffff;
+  --accent-dim:   color-mix(in oklab, var(--accent) 75%, #ffffff);
+  --accent-wash:  color-mix(in oklab, var(--accent) 10%, #ffffff);
+  --accent-hover: color-mix(in oklab, var(--accent) 85%, #000000);
+  --accent-press: color-mix(in oklab, var(--accent) 70%, #000000);
+
+  --accent-secondary:     var(--accent);
+  --accent-secondary-ink: var(--accent-ink);
+
+  --ok:   #40a02b;
+  --warn: #df8e1d;
+  --err:  #d20f39;
+  --info: #209fb5;
+
+  --shadow-sm:        2px 2px 0 0 var(--ink-999);
+  --shadow-md:        4px 4px 0 0 var(--ink-999);
+  --shadow-accent-sm: 2px 2px 0 0 var(--accent);
+  --shadow-accent-md: 4px 4px 0 0 var(--accent);
+}
+
+/* 4. Reduced motion — global kill switch. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-snap: 0ms;
+    --dur-quick: 0ms;
+    --press-offset: 0px;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

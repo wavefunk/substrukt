@@ -1,0 +1,19 @@
+@import url("./wavefunk.css");
+
+:root {
+  --accent: #f59e0b;
+  --accent-ink: #000000;
+  --accent-dim: color-mix(in srgb, #f59e0b 55%, black);
+  --accent-wash: color-mix(in srgb, #f59e0b 14%, black);
+  --accent-hover: color-mix(in srgb, #f59e0b 82%, white);
+  --accent-press: color-mix(in srgb, #f59e0b 70%, black);
+}
+
+[data-mode="light"] {
+  --accent: #d97706;
+  --accent-ink: #ffffff;
+  --accent-dim: color-mix(in srgb, #d97706 55%, white);
+  --accent-wash: color-mix(in srgb, #d97706 10%, white);
+  --accent-hover: color-mix(in srgb, #d97706 82%, black);
+  --accent-press: color-mix(in srgb, #d97706 70%, white);
+}

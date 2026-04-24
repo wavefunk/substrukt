@@ -1,0 +1,121 @@
+/* ============================================================================
+   Wave Funk — 02-base.css
+   Element defaults, type scale, reset. No component classes here.
+   ============================================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: var(--lh-body);
+  font-feature-settings: "calt" 1, "zero" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* Headings — display-style, UPPERCASE, tight tracking. */
+h1, .h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl); line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+  font-weight: var(--fw-black);
+  color: var(--fg-strong); text-transform: uppercase;
+  margin: 0;
+}
+h2, .h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl); line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: var(--fw-bold);
+  color: var(--fg-strong); text-transform: uppercase;
+  margin: 0;
+}
+h3, .h3 {
+  font-size: var(--fs-xl); line-height: var(--lh-snug);
+  font-weight: var(--fw-bold); color: var(--fg-strong);
+  margin: 0;
+}
+h4, .h4 {
+  font-size: var(--fs-lg); line-height: var(--lh-snug);
+  font-weight: var(--fw-bold); color: var(--fg-strong);
+  margin: 0;
+}
+h5, .h5 { font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--fg-strong); margin: 0; }
+h6, .h6 { font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--fg-strong); margin: 0; text-transform: uppercase; letter-spacing: var(--tr-caps); }
+
+p  { margin: 0; max-width: var(--content-w); }
+
+/* Links — accent, underline, thicken on hover. No color flip. */
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-thickness var(--dur-snap) linear;
+}
+a:hover { text-decoration-thickness: 2px; }
+
+hr {
+  border: 0;
+  border-top: var(--border-1) solid var(--hairline);
+  margin: var(--space-5) 0;
+}
+
+/* Code / kbd. */
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+code {
+  background: var(--ink-200);
+  border: var(--border-1) solid var(--hairline-dim);
+  padding: 1px 6px;
+}
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  border: var(--border-1) solid var(--hairline);
+  background: var(--ink-200);
+  color: var(--fg-strong);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* Universal focus — thick, visible, NEVER removed. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Form controls reset focus inset so it hugs. */
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible { outline-offset: 0; }
+
+/* Inherit type on form controls. */
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Utility: reading-width prose helper (primitive, not component). */
+.wf-prose-text { max-width: var(--content-w); }
+
+/* ASCII art block. */
+.wf-ascii {
+  font-family: var(--font-mono);
+  white-space: pre;
+  line-height: 1;
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+}
+
+/* htmx state hooks — universal, apply to any element hx-* is on.
+   Consumers add .wf-htmx to opt into these baseline treatments. */
+.wf-htmx.htmx-request { opacity: 0.55; pointer-events: none; cursor: wait; }
+.wf-htmx.htmx-swapping { opacity: 0; transition: opacity var(--dur-quick) var(--ease-snap); }
+.wf-htmx.htmx-settling { opacity: 1; }

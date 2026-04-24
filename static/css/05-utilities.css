@@ -1,0 +1,87 @@
+/* ============================================================================
+   Wave Funk — 05-utilities.css
+   Atomic helpers. Use sparingly — components first, utilities for gaps only.
+   ============================================================================ */
+
+/* Display */
+.wf-f { display: flex; } .wf-if { display: inline-flex; }
+.wf-g { display: grid; } .wf-ib { display: inline-block; }
+.wf-hidden { display: none !important; }
+
+/* Direction + wrap */
+.wf-col { flex-direction: column; }
+.wf-wrap { flex-wrap: wrap; } .wf-nowrap { flex-wrap: nowrap; }
+
+/* Align */
+.wf-ai-s { align-items: flex-start; } .wf-ai-c { align-items: center; }
+.wf-ai-e { align-items: flex-end; } .wf-ai-b { align-items: baseline; }
+
+/* Justify */
+.wf-jc-s { justify-content: flex-start; } .wf-jc-c { justify-content: center; }
+.wf-jc-e { justify-content: flex-end; } .wf-jc-sb { justify-content: space-between; }
+
+/* Sizing */
+.wf-grow { flex: 1; min-width: 0; }
+.wf-shrink-0 { flex-shrink: 0; }
+.wf-w-full { width: 100%; } .wf-h-full { height: 100%; }
+.wf-min-w-0 { min-width: 0; }
+
+/* Gap — multiples of 4px */
+.wf-gap-0 { gap: 0; } .wf-gap-1 { gap: 4px; } .wf-gap-2 { gap: 8px; }
+.wf-gap-3 { gap: 12px; } .wf-gap-4 { gap: 16px; } .wf-gap-5 { gap: 20px; }
+.wf-gap-6 { gap: 24px; } .wf-gap-8 { gap: 32px; } .wf-gap-10 { gap: 40px; }
+
+/* Padding */
+.wf-p-0 { padding: 0; } .wf-p-1 { padding: 4px; } .wf-p-2 { padding: 8px; }
+.wf-p-3 { padding: 12px; } .wf-p-4 { padding: 16px; } .wf-p-5 { padding: 20px; }
+.wf-p-6 { padding: 24px; } .wf-p-8 { padding: 32px; }
+.wf-px-3 { padding-inline: 12px; } .wf-px-4 { padding-inline: 16px; } .wf-px-5 { padding-inline: 20px; } .wf-px-6 { padding-inline: 24px; }
+.wf-py-2 { padding-block: 8px; } .wf-py-3 { padding-block: 12px; } .wf-py-4 { padding-block: 16px; } .wf-py-6 { padding-block: 24px; }
+
+/* Margin */
+.wf-m-auto { margin: auto; } .wf-mla { margin-left: auto; } .wf-mra { margin-right: auto; }
+.wf-mt-1 { margin-top: 4px; } .wf-mt-2 { margin-top: 8px; } .wf-mt-3 { margin-top: 12px; }
+.wf-mt-4 { margin-top: 16px; } .wf-mt-5 { margin-top: 20px; } .wf-mt-6 { margin-top: 24px; } .wf-mt-8 { margin-top: 32px; }
+.wf-mb-2 { margin-bottom: 8px; } .wf-mb-3 { margin-bottom: 12px; } .wf-mb-4 { margin-bottom: 16px; } .wf-mb-6 { margin-bottom: 24px; }
+
+/* Hairlines — border utilities */
+.wf-hair   { border-top: 1px solid var(--hairline); }
+.wf-hair-b { border-bottom: 1px solid var(--hairline); }
+.wf-hair-l { border-left: 1px solid var(--hairline); }
+.wf-hair-r { border-right: 1px solid var(--hairline); }
+.wf-dim    { border-top: 1px solid var(--hairline-dim); }
+.wf-dim-b  { border-bottom: 1px solid var(--hairline-dim); }
+
+/* Numeric + text */
+.wf-mono { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+.wf-tab { font-variant-numeric: tabular-nums; }
+.wf-upper { text-transform: uppercase; letter-spacing: 0.08em; }
+.wf-eyebrow { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-muted); }
+.wf-lead { font-size: var(--fs-md); color: var(--fg); }
+.wf-meta { font-size: var(--fs-sm); color: var(--fg-muted); letter-spacing: var(--tr-wide); text-transform: uppercase; }
+.wf-caption { font-size: var(--fs-xs); color: var(--fg-muted); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+
+.wf-t-xs { font-size: 10px; } .wf-t-sm { font-size: 12px; }
+.wf-t-md { font-size: 14px; } .wf-t-lg { font-size: 16px; } .wf-t-xl { font-size: 20px; }
+
+.wf-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-pretty { text-wrap: pretty; } .wf-balance { text-wrap: balance; }
+.wf-text-right { text-align: right; } .wf-text-left { text-align: left; } .wf-text-center { text-align: center; }
+
+/* Colors */
+.wf-fg { color: var(--fg); } .wf-fg-strong { color: var(--fg-strong); }
+.wf-fg-muted { color: var(--fg-muted); } .wf-fg-faint { color: var(--fg-faint); }
+.wf-bg { background: var(--bg); } .wf-bg-raised { background: var(--bg-raised); } .wf-bg-sunken { background: var(--bg-sunken); }
+.wf-accent { color: var(--accent); } .wf-accent-bg { background: var(--accent); color: var(--accent-ink); }
+.wf-ok { color: var(--ok); } .wf-warn { color: var(--warn); } .wf-err { color: var(--err); }
+
+.wf-dot { width: 6px; height: 6px; display: inline-block; background: currentColor; vertical-align: middle; }
+
+/* Motion — opt-in fade-up entry. */
+@keyframes wf-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.wf-animate-fade-up { animation: wf-fade-up var(--dur-quick) var(--ease-snap) both; }
+.wf-animate-delay-1 { animation-delay: 60ms; }
+.wf-animate-delay-2 { animation-delay: 120ms; }
