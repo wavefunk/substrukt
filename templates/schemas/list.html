@@ -1,54 +1,54 @@
 {% extends base_template %}
 {% block title %}Schemas — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">Schemas</h1>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Schemas</h1>
   {% if user_role == "admin" %}
-  <a href="/apps/{{ app.slug }}/schemas/new" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">New Schema</a>
+  <a href="/apps/{{ app.slug }}/schemas/new" class="wf-btn primary">New Schema</a>
   {% endif %}
 </div>
 
 {% if schemas %}
-<div class="bg-card border border-border-light rounded-lg overflow-hidden">
-  <table class="w-full">
-    <thead class="bg-card-alt">
+<div class="wf-panel" style="padding: 0;">
+  <table class="wf-table">
+    <thead>
       <tr>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Title</th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Slug</th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Storage</th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Kind</th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Fields</th>
-        <th class="text-left px-4 py-2.5 text-sm font-medium text-muted">Entries</th>
-        <th class="px-4 py-2.5"></th>
+        <th>Title</th>
+        <th>Slug</th>
+        <th>Storage</th>
+        <th>Kind</th>
+        <th>Fields</th>
+        <th>Entries</th>
+        <th></th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border-light">
+    <tbody>
       {% for schema in schemas %}
-      <tr class="hover:bg-card-alt">
-        <td class="px-4 py-2.5">
-          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" class="text-accent hover:underline font-medium">{{ schema.title }}</a>
+      <tr>
+        <td class="strong">
+          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" style="color: var(--accent);">{{ schema.title }}</a>
         </td>
-        <td class="px-4 py-2.5 text-muted text-sm font-mono">{{ schema.slug }}</td>
-        <td class="px-4 py-2.5 text-muted text-sm">{{ schema.storage }}</td>
-        <td class="px-4 py-2.5 text-muted text-sm">{{ schema.kind }}</td>
-        <td class="px-4 py-2.5 text-muted text-sm">{{ schema.field_count }}</td>
-        <td class="px-4 py-2.5 text-sm">
+        <td>{{ schema.slug }}</td>
+        <td>{{ schema.storage }}</td>
+        <td>{{ schema.kind }}</td>
+        <td>{{ schema.field_count }}</td>
+        <td>
           {% if schema.is_single %}
             {% if schema.entry_count > 0 %}
-            <span class="text-success">Exists</span>
+            <span style="color: var(--ok);">Exists</span>
             {% else %}
-            <span class="text-muted">Empty</span>
+            <span style="color: var(--fg-muted);">Empty</span>
             {% endif %}
           {% else %}
-          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" class="text-accent hover:underline">{{ schema.entry_count }}</a>
+          <a href="/apps/{{ app.slug }}/content/{{ schema.slug }}" style="color: var(--accent);">{{ schema.entry_count }}</a>
           {% endif %}
         </td>
         {% if user_role == "admin" %}
-        <td class="px-4 py-2.5 text-right">
-          <a href="/apps/{{ app.slug }}/schemas/{{ schema.slug }}/edit" class="text-muted hover:text-accent text-sm">Edit</a>
+        <td style="text-align: right;">
+          <a href="/apps/{{ app.slug }}/schemas/{{ schema.slug }}/edit" style="color: var(--fg-muted);">Edit</a>
         </td>
         {% else %}
-        <td class="px-4 py-2.5"></td>
+        <td></td>
         {% endif %}
       </tr>
       {% endfor %}
@@ -56,12 +56,15 @@
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border-light rounded-lg p-8 text-center text-muted">
-  {% if user_role == "admin" %}
-  No schemas yet. <a href="/apps/{{ app.slug }}/schemas/new" class="text-accent hover:underline">Create your first schema</a>.
-  {% else %}
-  No schemas yet.
-  {% endif %}
+<div class="wf-empty bordered">
+  <div class="wf-empty-title">No schemas yet</div>
+  <div class="wf-empty-body">
+    {% if user_role == "admin" %}
+    <a href="/apps/{{ app.slug }}/schemas/new" style="color: var(--accent);">Create your first schema</a>.
+    {% else %}
+    No schemas have been created for this app.
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 {% endblock %}

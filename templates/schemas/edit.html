@@ -1,69 +1,73 @@
 {% extends base_template %}
 {% block title %}{% if is_new %}New Schema{% else %}Edit Schema{% endif %} — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">{% if is_new %}New Schema{% else %}Edit Schema{% endif %}</h1>
-  <a href="/apps/{{ app.slug }}/schemas" class="text-muted hover:text-primary text-sm">Back to Schemas</a>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{% if is_new %}New Schema{% else %}Edit Schema{% endif %}</h1>
+  <a href="/apps/{{ app.slug }}/schemas" style="color: var(--fg-muted);">Back to Schemas</a>
 </div>
 
 {% if error %}
-<div class="bg-danger-soft text-danger p-3 rounded mb-4 text-sm">{{ error }}</div>
+<div class="wf-alert err" style="margin-bottom: 16px;"><div class="wf-alert-bar"></div><div>{{ error }}</div></div>
 {% endif %}
 
 {% if is_new %}
-<details class="mb-4 bg-card border border-border-light rounded-lg">
-  <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-secondary hover:text-primary select-none">Schema Reference</summary>
-  <div class="px-4 pb-4 text-sm text-secondary space-y-3">
-    <div>
-      <h4 class="font-medium text-primary mb-1">x-substrukt fields</h4>
-      <ul class="list-disc list-inside text-xs space-y-0.5">
-        <li><code>title</code> — Display name for the content type</li>
-        <li><code>slug</code> — URL-safe identifier (auto-generated from title if omitted)</li>
-        <li><code>storage</code> — <code>directory</code> (one file per entry) or <code>single-file</code> (all entries in one JSON file)</li>
-        <li><code>kind</code> — <code>collection</code> (multiple entries) or <code>single</code> (one entry, e.g. site settings)</li>
-      </ul>
+<div class="wf-accordion" style="margin-bottom: 16px;">
+  <details class="wf-accordion-item">
+    <summary class="wf-accordion-trigger">Schema Reference</summary>
+    <div class="wf-accordion-body">
+      <div>
+        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">x-substrukt fields</div>
+        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+          <li><code>title</code> — Display name for the content type</li>
+          <li><code>slug</code> — URL-safe identifier (auto-generated from title if omitted)</li>
+          <li><code>storage</code> — <code>directory</code> (one file per entry) or <code>single-file</code> (all entries in one JSON file)</li>
+          <li><code>kind</code> — <code>collection</code> (multiple entries) or <code>single</code> (one entry, e.g. site settings)</li>
+        </ul>
+      </div>
+      <div>
+        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">Supported property types</div>
+        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+          <li><code>string</code> — text input. Add <code>"format": "textarea"</code>, <code>"markdown"</code>, <code>"upload"</code>, or <code>"reference"</code></li>
+          <li><code>number</code> / <code>integer</code> — numeric input with optional min/max</li>
+          <li><code>boolean</code> — checkbox</li>
+          <li><code>object</code> — nested fieldset</li>
+          <li><code>array</code> — repeatable items (define <code>"items"</code> schema)</li>
+          <li><code>enum</code> — dropdown select (add <code>"enum": ["a", "b"]</code> to a string)</li>
+        </ul>
+      </div>
+      <div>
+        <div style="font-weight: 700; color: var(--fg-strong); margin-bottom: 4px;">Extensions</div>
+        <ul style="list-style: disc; padding-left: 16px; font-size: 12px; color: var(--fg-muted);">
+          <li><code>"x-control": "textarea"</code> — render string as multi-line textarea</li>
+          <li><code>"x-substrukt-reference": {"schema": "slug"}</code> — reference to another content type</li>
+        </ul>
+      </div>
     </div>
-    <div>
-      <h4 class="font-medium text-primary mb-1">Supported property types</h4>
-      <ul class="list-disc list-inside text-xs space-y-0.5">
-        <li><code>string</code> — text input. Add <code>"format": "textarea"</code>, <code>"markdown"</code>, <code>"upload"</code>, or <code>"reference"</code></li>
-        <li><code>number</code> / <code>integer</code> — numeric input with optional min/max</li>
-        <li><code>boolean</code> — checkbox</li>
-        <li><code>object</code> — nested fieldset</li>
-        <li><code>array</code> — repeatable items (define <code>"items"</code> schema)</li>
-        <li><code>enum</code> — dropdown select (add <code>"enum": ["a", "b"]</code> to a string)</li>
-      </ul>
-    </div>
-    <div>
-      <h4 class="font-medium text-primary mb-1">Extensions</h4>
-      <ul class="list-disc list-inside text-xs space-y-0.5">
-        <li><code>"x-control": "textarea"</code> — render string as multi-line textarea</li>
-        <li><code>"x-substrukt-reference": {"schema": "slug"}</code> — reference to another content type</li>
-      </ul>
-    </div>
-  </div>
-</details>
+  </details>
+</div>
 {% endif %}
 
-<div class="bg-card border border-border-light rounded-lg p-6">
-  <form id="schema-form" method="post" action="{% if is_new %}/apps/{{ app.slug }}/schemas/new{% else %}/apps/{{ app.slug }}/schemas/{{ slug }}{% endif %}">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="hidden" id="schema_json" name="schema_json" value="">
-    <div class="mb-4">
-      <label class="block text-sm font-medium text-secondary mb-1">JSON Schema</label>
-      <div id="jsoneditor" style="height: 500px; border: 1px solid var(--border); border-radius: 0.375rem;"></div>
-    </div>
-    <div class="flex gap-3">
-      <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-        {% if is_new %}Create Schema{% else %}Save Changes{% endif %}
-      </button>
-      {% if not is_new %}
-      <button type="button" onclick="deleteSchema()" class="text-danger hover:bg-danger-soft px-4 py-2 rounded-md text-sm font-medium">
-        Delete
-      </button>
-      {% endif %}
-    </div>
-  </form>
+<div class="wf-panel">
+  <div class="wf-panel-body">
+    <form id="schema-form" method="post" action="{% if is_new %}/apps/{{ app.slug }}/schemas/new{% else %}/apps/{{ app.slug }}/schemas/{{ slug }}{% endif %}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" id="schema_json" name="schema_json" value="">
+      <div style="margin-bottom: 16px;">
+        <label class="wf-label" style="margin-bottom: 4px;">JSON Schema</label>
+        <div id="jsoneditor" style="height: 500px; border: 1px solid var(--hairline);"></div>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <button type="submit" class="wf-btn primary">
+          {% if is_new %}Create Schema{% else %}Save Changes{% endif %}
+        </button>
+        {% if not is_new %}
+        <button type="button" onclick="deleteSchema()" class="wf-btn danger">
+          Delete
+        </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
 </div>
 
 <script type="module">
