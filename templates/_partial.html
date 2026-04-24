@@ -1,10 +1,8 @@
 <span id="page-title" hidden>{% block title %}Substrukt{% endblock %}</span>
 {% if flash_kind %}
-<div class="mb-4 p-4 rounded-md text-sm
-  {% if flash_kind == 'success' %}bg-success-soft text-success border border-success
-  {% elif flash_kind == 'error' %}bg-danger-soft text-danger border border-danger
-  {% else %}bg-accent-soft text-accent border border-accent{% endif %}">
-  {{ flash_message }}
+<div class="wf-alert {% if flash_kind == 'success' %}ok{% elif flash_kind == 'error' %}err{% else %}info{% endif %}" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>{{ flash_message }}</div>
 </div>
 {% endif %}
 {% block content %}{% endblock %}
@@ -16,12 +14,23 @@
     var index = container.querySelectorAll('.array-item').length;
     var html = template.innerHTML.replace(/__INDEX__/g, index);
     var div = document.createElement('div');
-    div.className = 'array-item border border-border-light p-3 rounded mb-2';
+    div.className = 'array-item wf-framed';
     div.setAttribute('data-index', index);
-    div.innerHTML = '<div class="flex justify-end mb-1"><button type="button" onclick="this.closest(\x27.array-item\x27).remove()" class="text-danger text-sm hover:text-danger">Remove</button></div>' + html;
+    var header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 4px;';
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.style.cssText = 'color: var(--err); cursor: pointer; background: none; border: none; font-size: 13px;';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', function() { div.remove(); });
+    header.appendChild(removeBtn);
+    div.appendChild(header);
+    var content = document.createElement('div');
+    content.innerHTML = html;
+    while (content.firstChild) { div.appendChild(content.firstChild); }
     container.appendChild(div);
   }
 </script>
-<nav id="sidebar-nav" hx-swap-oob="true" class="w-56 bg-sidebar text-white p-4 flex flex-col gap-1 min-h-screen border-r border-border-light">
+<aside class="wf-sidebar" hx-swap-oob="true" id="sidebar-nav">
   {% include "_nav.html" %}
-</nav>
+</aside>
