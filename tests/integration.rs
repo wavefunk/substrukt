@@ -2646,11 +2646,13 @@ fn extract_upload_hash(html: &str) -> Option<String> {
 
 /// Extract the newly created token from the tokens page HTML.
 fn extract_new_token(html: &str) -> Option<String> {
-    // Token is in: <code class="...select-all">TOKEN</code>
+    // Token is in: <code id="token-value" ...>TOKEN</code>
     // allowthem generates base64url tokens (43 chars: alphanumeric + - + _)
-    let marker = "select-all\">";
+    let marker = "id=\"token-value\"";
     if let Some(pos) = html.find(marker) {
-        let rest = &html[pos + marker.len()..];
+        let after_marker = &html[pos + marker.len()..];
+        let gt = after_marker.find('>')?;
+        let rest = &after_marker[gt + 1..];
         if let Some(end) = rest.find('<') {
             let token = rest[..end].trim();
             if token.len() >= 32
@@ -2665,11 +2667,13 @@ fn extract_new_token(html: &str) -> Option<String> {
     None
 }
 
-/// Extract an invite URL from the users page (in select-all code block).
+/// Extract an invite URL from the users page (in invite-url-value code block).
 fn extract_invite_url(html: &str) -> Option<String> {
-    let marker = "select-all\">";
+    let marker = "id=\"invite-url-value\"";
     if let Some(pos) = html.find(marker) {
-        let rest = &html[pos + marker.len()..];
+        let after_marker = &html[pos + marker.len()..];
+        let gt = after_marker.find('>')?;
+        let rest = &after_marker[gt + 1..];
         if let Some(end) = rest.find('<') {
             let url = rest[..end].trim();
             // minijinja HTML-escapes `/` as `&#x2f;`
