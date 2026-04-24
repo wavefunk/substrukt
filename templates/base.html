@@ -46,6 +46,27 @@
     :root:not([data-mode="light"]) .EasyMDEContainer .editor-toolbar.disabled-for-preview button:not(.no-disable) {
       opacity: 0.4;
     }
+
+    /* vanilla-jsoneditor dark mode overrides */
+    :root:not([data-mode="light"]) .jse-theme-default,
+    :root:not([data-mode="light"]) .vanilla-jsoneditor {
+      --jse-theme-color: var(--accent);
+      --jse-background-color: var(--bg-raised);
+      --jse-text-color: var(--fg);
+      --jse-panel-background: var(--bg-raised);
+      --jse-panel-color: var(--fg);
+      --jse-panel-border: var(--hairline);
+      --jse-main-border: 1px solid var(--hairline);
+      --jse-menu-color: var(--fg);
+      --jse-menu-button-background-highlight: var(--bg-hover);
+      --jse-context-menu-background: var(--bg-raised);
+      --jse-context-menu-color: var(--fg);
+      --jse-key-color: var(--accent);
+      --jse-value-color-string: var(--ok);
+      --jse-value-color-number: var(--info);
+      --jse-delimiter-color: var(--fg-muted);
+      --jse-selection-background-color: var(--accent-wash);
+    }
   </style>
   <script>
     (function() {

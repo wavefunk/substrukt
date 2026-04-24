@@ -18,7 +18,7 @@
 </head>
 <body class="wf-f wf-ai-c wf-jc-c" style="background: var(--bg); color: var(--fg); min-height: 100vh;">
   <div class="wf-p-8 wf-w-full" style="border: 1px solid var(--hairline); max-width: 380px; position: relative;">
-    <button class="wf-fg-muted" style="position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer;" onclick="var isLight=document.documentElement.getAttribute('data-mode')==='light';if(isLight){document.documentElement.removeAttribute('data-mode');localStorage.setItem('theme','dark')}else{document.documentElement.setAttribute('data-mode','light');localStorage.setItem('theme','light')};this.querySelector('.theme-icon').textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'">
+    <button class="wf-icon-btn ghost" style="position: absolute; top: 12px; right: 12px;" title="Toggle theme" onclick="var isLight=document.documentElement.getAttribute('data-mode')==='light';if(isLight){document.documentElement.removeAttribute('data-mode');localStorage.setItem('theme','dark')}else{document.documentElement.setAttribute('data-mode','light');localStorage.setItem('theme','light')};this.querySelector('.theme-icon').textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'">
       <span class="theme-icon">☀</span>
     </button>
     <script>(function(){var el=document.currentScript.previousElementSibling.querySelector('.theme-icon');el.textContent=document.documentElement.getAttribute('data-mode')==='light'?'☾':'☀'})()</script>
