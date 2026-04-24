@@ -1,29 +1,27 @@
 {% extends base_template %}
 {% block title %}New App — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">New App</h1>
-  <a href="/apps" class="text-muted hover:text-primary text-sm">Back to Apps</a>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">New App</h1>
+  <a href="/apps" style="color: var(--fg-muted);">Back to Apps</a>
 </div>
 
-<div class="bg-card border border-border-light rounded-lg p-6 max-w-lg">
-  <form method="post" action="/apps">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <div class="mb-4">
-      <label for="name" class="block text-sm font-medium mb-1">App Name</label>
-      <input type="text" id="name" name="name" required placeholder="My App"
-        class="w-full px-3 py-2 border border-border rounded-md bg-input-bg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
-    </div>
-    <div class="mb-6">
-      <label for="slug" class="block text-sm font-medium mb-1">Slug</label>
-      <input type="text" id="slug" name="slug" required placeholder="my-app"
-        class="w-full px-3 py-2 border border-border rounded-md bg-input-bg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
-      <p class="mt-1 text-xs text-muted">Lowercase letters, numbers, and hyphens. Used in URLs and file paths.</p>
-    </div>
-    <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-      Create App
-    </button>
-  </form>
+<div class="wf-panel" style="max-width: 520px;">
+  <div class="wf-panel-body">
+    <form method="post" action="/apps">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <div class="wf-field" style="margin-bottom: 20px;">
+        <label for="name" class="wf-label">App Name</label>
+        <input type="text" id="name" name="name" required placeholder="My App" class="wf-input">
+      </div>
+      <div class="wf-field" style="margin-bottom: 24px;">
+        <label for="slug" class="wf-label">Slug</label>
+        <input type="text" id="slug" name="slug" required placeholder="my-app" class="wf-input" style="font-family: var(--font-mono);">
+        <p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">Lowercase letters, numbers, and hyphens. Used in URLs and file paths.</p>
+      </div>
+      <button type="submit" class="wf-btn primary">Create App</button>
+    </form>
+  </div>
 </div>
 
 <script>

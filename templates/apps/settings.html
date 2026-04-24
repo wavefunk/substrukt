@@ -1,118 +1,124 @@
 {% extends base_template %}
 {% block title %}{{ app.name }} Settings — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">{{ app.name }} — Settings</h1>
-  <a href="/apps/{{ app.slug }}/schemas" class="text-muted hover:text-primary text-sm">Back to App</a>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{{ app.name }} — Settings</h1>
+  <a href="/apps/{{ app.slug }}/schemas" style="color: var(--fg-muted);">Back to App</a>
 </div>
 
 {% if flash_kind == "token" %}
-<div class="bg-success-soft border border-success text-success p-4 rounded mb-6">
-  <div class="font-medium mb-1">Token created! Copy it now — it won't be shown again:</div>
-  <div class="flex items-center gap-2 mt-2">
-    <code id="token-value" class="flex-1 bg-card-alt text-primary p-2 rounded text-sm font-mono break-all select-all">{{ flash_message | replace("Token created: ", "") }}</code>
-    <button type="button" onclick="copyToClipboard('token-value', this)"
-      class="shrink-0 bg-card-alt border border-border text-primary px-3 py-2 rounded text-sm hover:bg-card transition-colors">
-      Copy
-    </button>
+<div class="wf-alert ok" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div style="flex: 1;">
+    <div style="font-weight: 600; margin-bottom: 4px;">Token created! Copy it now — it won't be shown again:</div>
+    <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+      <code id="token-value" style="flex: 1; background: var(--bg-sunken); color: var(--fg-strong); padding: 8px; font-family: var(--font-mono); font-size: 13px; word-break: break-all; user-select: all;">{{ flash_message | replace("Token created: ", "") }}</code>
+      <button type="button" onclick="copyToClipboard('token-value', this)" class="wf-btn">Copy</button>
+    </div>
   </div>
 </div>
 {% elif flash_kind == "success" %}
-<div class="bg-success-soft border border-success text-success p-4 rounded mb-6">{{ flash_message }}</div>
+<div class="wf-alert ok" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>{{ flash_message }}</div>
+</div>
 {% elif flash_kind == "error" %}
-<div class="bg-danger-soft border border-danger text-danger p-4 rounded mb-6">{{ flash_message }}</div>
+<div class="wf-alert err" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>{{ flash_message }}</div>
+</div>
 {% endif %}
 
 {# App Name #}
-<div class="bg-card border border-border-light rounded-lg p-6 mb-6">
-  <h2 class="text-lg font-medium mb-4">App Name</h2>
-  <form method="post" action="/apps/{{ app.slug }}/settings" class="flex gap-3" hx-boost="false">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <label for="app-name" class="sr-only">App Name</label>
-    <input type="text" id="app-name" name="name" value="{{ app.name }}" required
-      class="flex-1 px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
-    <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-      Update
-    </button>
-  </form>
+<div class="wf-panel" style="margin-bottom: 24px;">
+  <div class="wf-panel-head"><span class="wf-panel-title">App Name</span></div>
+  <div class="wf-panel-body">
+    <form method="post" action="/apps/{{ app.slug }}/settings" style="display: flex; gap: 12px;" hx-boost="false">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label for="app-name" class="sr-only">App Name</label>
+      <input type="text" id="app-name" name="name" value="{{ app.name }}" required class="wf-input" style="flex: 1;">
+      <button type="submit" class="wf-btn primary">Update</button>
+    </form>
+  </div>
 </div>
 
 {# User Access #}
-<div class="bg-card border border-border-light rounded-lg p-6 mb-6">
-  <h2 class="text-lg font-medium mb-4">User Access</h2>
-  <p class="text-sm text-muted mb-4">Admins always have access to all apps. Check the users below to grant non-admin users access to this app.</p>
-  <form method="post" action="/apps/{{ app.slug }}/settings/access">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <div class="space-y-2 mb-4">
-      {% for user in users %}
-      <label class="flex items-center gap-3 p-2 rounded hover:bg-card-alt">
-        <input type="checkbox" name="access" value="{{ user.id }}"
-          {% if user.has_access %}checked{% endif %}
-          {% if user.role == "admin" %}checked disabled{% endif %}
-          class="rounded border-border">
-        <span class="text-sm">{{ user.username }}</span>
-        <span class="text-xs text-muted px-2 py-0.5 bg-card-alt rounded">{{ user.role }}</span>
-      </label>
-      {% endfor %}
-    </div>
-    {% if users %}
-    <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-      Save Access
-    </button>
-    {% endif %}
-  </form>
+<div class="wf-panel" style="margin-bottom: 24px;">
+  <div class="wf-panel-head"><span class="wf-panel-title">User Access</span></div>
+  <div class="wf-panel-body">
+    <p style="font-size: 13px; color: var(--fg-muted); margin-bottom: 16px;">Admins always have access to all apps. Check the users below to grant non-admin users access to this app.</p>
+    <form method="post" action="/apps/{{ app.slug }}/settings/access">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        {% for user in users %}
+        <label class="wf-check-row">
+          <input type="checkbox" name="access" value="{{ user.id }}"
+            {% if user.has_access %}checked{% endif %}
+            {% if user.role == "admin" %}checked disabled{% endif %}
+            class="wf-check">
+          <span style="font-size: 13px;">{{ user.username }}</span>
+          <span class="wf-tag">{{ user.role }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% if users %}
+      <button type="submit" class="wf-btn primary">Save Access</button>
+      {% endif %}
+    </form>
+  </div>
 </div>
 
 {# API Tokens #}
-<div class="bg-card border border-border-light rounded-lg p-6 mb-6">
-  <h2 class="text-lg font-medium mb-4">API Tokens</h2>
-  <form method="post" action="/apps/{{ app.slug }}/settings/tokens" class="flex gap-3 mb-4">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="text" name="name" placeholder="Token name" required
-      class="flex-1 px-3 py-2 bg-input-bg border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent">
-    <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-      Create Token
-    </button>
-  </form>
-  {% if tokens %}
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="border-b border-border-light text-left text-muted">
-        <th class="pb-2 font-medium">Name</th>
-        <th class="pb-2 font-medium">Created</th>
-        <th class="pb-2"></th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-border-light">
-      {% for token in tokens %}
-      <tr class="hover:bg-card-alt">
-        <td class="py-2.5 font-medium">{{ token.name }}</td>
-        <td class="py-2.5 text-muted">{{ token.created_at|datefmt }}</td>
-        <td class="py-2.5 text-right">
-          <form method="post" action="/apps/{{ app.slug }}/settings/tokens/{{ token.id }}/delete" class="inline">
-            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-            <button type="submit" class="text-danger hover:text-danger text-sm"
-              onclick="return confirm('Delete this token?')">Delete</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="text-muted text-sm">No API tokens yet.</p>
-  {% endif %}
+<div class="wf-panel" style="margin-bottom: 24px;">
+  <div class="wf-panel-head"><span class="wf-panel-title">API Tokens</span></div>
+  <div class="wf-panel-body">
+    <form method="post" action="/apps/{{ app.slug }}/settings/tokens" style="display: flex; gap: 12px; margin-bottom: 16px;">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="text" name="name" placeholder="Token name" required class="wf-input" style="flex: 1;">
+      <button type="submit" class="wf-btn primary">Create Token</button>
+    </form>
+    {% if tokens %}
+    <table class="wf-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for token in tokens %}
+        <tr>
+          <td class="strong">{{ token.name }}</td>
+          <td class="muted">{{ token.created_at|datefmt }}</td>
+          <td style="text-align: right;">
+            <form method="post" action="/apps/{{ app.slug }}/settings/tokens/{{ token.id }}/delete" style="display: inline;">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button type="submit" class="wf-btn danger sm"
+                onclick="return confirm('Delete this token?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--fg-muted); font-size: 13px;">No API tokens yet.</p>
+    {% endif %}
+  </div>
 </div>
 
 {% if app.slug != "default" %}
 {# Danger Zone #}
-<div class="bg-card border border-danger rounded-lg p-6">
-  <h2 class="text-lg font-medium mb-4 text-danger">Danger Zone</h2>
-  <form method="post" action="/apps/{{ app.slug }}/delete" class="inline" hx-boost="false"
-    onsubmit="return confirm('Delete app \'{{ app.name }}\'? This will permanently remove all schemas, content, uploads, and deployments for this app. This cannot be undone.')">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">Delete App</button>
-  </form>
+<div class="wf-panel is-danger">
+  <div class="wf-panel-head"><span class="wf-panel-title">Danger Zone</span></div>
+  <div class="wf-panel-body">
+    <form method="post" action="/apps/{{ app.slug }}/delete" style="display: inline;" hx-boost="false"
+      onsubmit="return confirm('Delete app \'{{ app.name }}\'? This will permanently remove all schemas, content, uploads, and deployments for this app. This cannot be undone.')">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <button type="submit" class="wf-btn danger">Delete App</button>
+    </form>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

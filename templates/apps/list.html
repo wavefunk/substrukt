@@ -1,29 +1,35 @@
 {% extends base_template %}
 {% block title %}Apps — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">Apps</h1>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">Apps</h1>
   {% if user_role == "admin" %}
-  <a href="/apps/new" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">New App</a>
+  <a href="/apps/new" class="wf-btn primary">New App</a>
   {% endif %}
 </div>
 
 {% if apps %}
-<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+<div class="wf-grid cols-3">
   {% for app in apps %}
-  <a href="/apps/{{ app.slug }}/schemas" class="block bg-card border border-border-light rounded-lg p-6 hover:border-accent transition-colors">
-    <div class="font-medium text-lg mb-1">{{ app.name }}</div>
-    <div class="text-muted text-sm font-mono mb-3">{{ app.slug }}</div>
-    <div class="text-sm text-secondary">{{ app.schema_count }} schema{% if app.schema_count != 1 %}s{% endif %}</div>
+  <a class="wf-card" href="/apps/{{ app.slug }}/schemas" style="text-decoration: none;">
+    <div class="wf-card-title">{{ app.name }}</div>
+    <div class="wf-card-body">
+      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--fg-muted); margin-bottom: 8px;">{{ app.slug }}</div>
+      <div style="font-size: 13px; color: var(--fg);">{{ app.schema_count }} schema{% if app.schema_count != 1 %}s{% endif %}</div>
+    </div>
   </a>
   {% endfor %}
 </div>
 {% else %}
-<div class="bg-card border border-border-light rounded-lg p-8 text-center text-muted">
+<div class="wf-empty bordered">
   {% if user_role == "admin" %}
-  No apps yet. <a href="/apps/new" class="text-accent hover:underline">Create your first app</a>.
+  <div class="wf-empty-title">No apps yet</div>
+  <div class="wf-empty-body">
+    <a href="/apps/new" style="color: var(--accent);">Create your first app</a>.
+  </div>
   {% else %}
-  You don't have access to any apps yet. Ask an admin to grant you access.
+  <div class="wf-empty-title">No access</div>
+  <div class="wf-empty-body">You don't have access to any apps yet. Ask an admin to grant you access.</div>
   {% endif %}
 </div>
 {% endif %}

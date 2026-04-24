@@ -1,89 +1,106 @@
 {% extends base_template %}
 {% block title %}Data — {{ app.name }} — Substrukt{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold tracking-tight">{{ app.name }} — Data</h1>
-  <a href="/apps/{{ app.slug }}/schemas" class="text-muted hover:text-primary text-sm">Back to App</a>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 style="font-family: var(--font-mono); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0;">{{ app.name }} — Data</h1>
+  <a href="/apps/{{ app.slug }}/schemas" style="color: var(--fg-muted);">Back to App</a>
 </div>
 
 {% if data_result %}
 {% if data_result.status == "success" %}
-<div class="bg-success-soft border border-success text-success p-4 rounded mb-6">
-  {{ data_result.message }}
+<div class="wf-alert ok" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>{{ data_result.message }}</div>
 </div>
 {% elif data_result.status == "warning" %}
-<div class="bg-accent-soft border border-accent text-accent p-4 rounded mb-6">
-  <div class="font-medium">{{ data_result.message }}</div>
-  {% if data_result.warnings %}
-  <details class="mt-2">
-    <summary class="text-sm cursor-pointer hover:underline">Show warnings</summary>
-    <ul class="mt-2 text-sm list-disc list-inside space-y-1">
-      {% for w in data_result.warnings %}
-      <li>{{ w }}</li>
-      {% endfor %}
-    </ul>
-  </details>
-  {% endif %}
+<div class="wf-alert warn" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>
+    <div style="font-weight: 600;">{{ data_result.message }}</div>
+    {% if data_result.warnings %}
+    <details style="margin-top: 8px;">
+      <summary style="font-size: 13px; cursor: pointer;">Show warnings</summary>
+      <ul style="margin-top: 8px; font-size: 13px; padding-left: 20px;">
+        {% for w in data_result.warnings %}
+        <li style="margin-bottom: 4px;">{{ w }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </div>
 </div>
 {% elif data_result.status == "error" %}
-<div class="bg-danger-soft border border-danger text-danger p-4 rounded mb-6">
-  {{ data_result.message }}
+<div class="wf-alert err" style="margin-bottom: 20px;">
+  <div class="wf-alert-bar"></div>
+  <div>{{ data_result.message }}</div>
 </div>
 {% endif %}
 {% endif %}
 
-<div class="bg-card border border-border-light rounded-lg p-6 mb-6">
-  <h2 class="text-lg font-medium mb-2">Export</h2>
-  <p class="text-muted text-sm mb-4">Export all schemas, content, and uploads for this app as a .tar.gz bundle.</p>
-  <form method="post" action="/apps/{{ app.slug }}/data/export" hx-disable>
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <button type="submit" class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium">
-      Download Bundle
-    </button>
-  </form>
+<div class="wf-panel" style="margin-bottom: 24px;">
+  <div class="wf-panel-head"><span class="wf-panel-title">Export</span></div>
+  <div class="wf-panel-body">
+    <p style="color: var(--fg-muted); font-size: 13px; margin-bottom: 16px;">Export all schemas, content, and uploads for this app as a .tar.gz bundle.</p>
+    <form method="post" action="/apps/{{ app.slug }}/data/export" hx-disable>
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <button type="submit" class="wf-btn primary">Download Bundle</button>
+    </form>
+  </div>
 </div>
 
-<div class="bg-card border border-border-light rounded-lg p-6">
-  <h2 class="text-lg font-medium mb-2">Import</h2>
-  <p class="text-muted text-sm mb-4">Import a .tar.gz bundle. <span class="text-danger font-medium">This will overwrite existing schemas, content, and uploads for this app.</span></p>
-  <form id="import-form" method="post" action="/apps/{{ app.slug }}/data/import" enctype="multipart/form-data" hx-disable>
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <div class="flex gap-3 items-end">
-      <input type="file" name="bundle" accept=".tar.gz,.tgz,application/gzip" required
-        id="bundle-input"
-        onchange="document.getElementById('import-btn').disabled=!this.files.length"
-        class="flex-1 text-sm file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-card-alt file:text-primary hover:file:bg-sidebar-hover">
-      <button type="button" id="import-btn" disabled
-        class="bg-accent text-black px-4 py-2 rounded-md hover:bg-accent-hover text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick="showImportConfirm()">
-        Import Bundle
-      </button>
-    </div>
-  </form>
+<div class="wf-panel">
+  <div class="wf-panel-head"><span class="wf-panel-title">Import</span></div>
+  <div class="wf-panel-body">
+    <p style="color: var(--fg-muted); font-size: 13px; margin-bottom: 16px;">Import a .tar.gz bundle. <span style="color: var(--err); font-weight: 600;">This will overwrite existing schemas, content, and uploads for this app.</span></p>
+    <form id="import-form" method="post" action="/apps/{{ app.slug }}/data/import" enctype="multipart/form-data" hx-disable>
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <div style="display: flex; gap: 12px; align-items: flex-end;">
+        <input type="file" name="bundle" accept=".tar.gz,.tgz,application/gzip" required
+          id="bundle-input"
+          onchange="document.getElementById('import-btn').disabled=!this.files.length"
+          class="wf-input" style="flex: 1;">
+        <button type="button" id="import-btn" disabled
+          class="wf-btn primary"
+          onclick="showImportConfirm()">
+          Import Bundle
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
-<div id="import-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-  <div class="bg-card rounded-lg shadow-xl p-6 w-full max-w-md border border-border-light">
-    <h3 class="text-lg font-bold text-danger mb-2">Confirm Import</h3>
-    <p class="text-sm text-secondary mb-4">This will <strong>permanently overwrite</strong> all schemas, content, and uploads for <strong>{{ app.name }}</strong>. This action cannot be undone.</p>
-    <label for="confirm-app-name" class="block text-sm font-medium text-secondary mb-1">Type <strong>{{ app.slug }}</strong> to confirm:</label>
-    <input type="text" id="confirm-app-name" autocomplete="off" class="w-full px-3 py-2 border border-border rounded-md bg-input-bg focus:outline-none focus:ring-2 focus:ring-danger focus:border-danger mb-4">
-    <div class="flex gap-3 justify-end">
-      <button type="button" onclick="hideImportConfirm()" class="px-4 py-2 rounded-md border border-border text-secondary hover:bg-card-alt text-sm font-medium">Cancel</button>
-      <button type="button" id="confirm-import-btn" disabled onclick="submitImport()" class="bg-danger text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Import and Overwrite</button>
+<div id="import-confirm-modal" class="wf-overlay" style="display: none;">
+</div>
+<div id="import-confirm-dialog" class="wf-modal" style="display: none;">
+  <div class="wf-modal-head"><span class="wf-modal-title">Confirm Import</span><button class="wf-icon-btn ghost" onclick="hideImportConfirm()">×</button></div>
+  <div class="wf-modal-body">
+    <p style="font-size: 13px; margin-bottom: 16px;">This will <strong>permanently overwrite</strong> all schemas, content, and uploads for <strong>{{ app.name }}</strong>. This action cannot be undone.</p>
+    <div class="wf-field">
+      <label for="confirm-app-name" class="wf-label">Type <strong>{{ app.slug }}</strong> to confirm:</label>
+      <input type="text" id="confirm-app-name" autocomplete="off" class="wf-input">
     </div>
+  </div>
+  <div class="wf-modal-foot">
+    <button class="wf-btn" onclick="hideImportConfirm()">Cancel</button>
+    <button class="wf-btn danger" id="confirm-import-btn" disabled onclick="submitImport()">Import and Overwrite</button>
   </div>
 </div>
 
 <script>
 function showImportConfirm() {
-  document.getElementById('import-confirm-modal').classList.remove('hidden');
+  document.getElementById('import-confirm-modal').style.display = '';
+  document.getElementById('import-confirm-dialog').style.display = '';
+  document.getElementById('import-confirm-modal').classList.add('is-open');
+  document.getElementById('import-confirm-dialog').classList.add('is-open');
   document.getElementById('confirm-app-name').value = '';
   document.getElementById('confirm-import-btn').disabled = true;
   document.getElementById('confirm-app-name').focus();
 }
 function hideImportConfirm() {
-  document.getElementById('import-confirm-modal').classList.add('hidden');
+  document.getElementById('import-confirm-modal').classList.remove('is-open');
+  document.getElementById('import-confirm-dialog').classList.remove('is-open');
+  document.getElementById('import-confirm-modal').style.display = 'none';
+  document.getElementById('import-confirm-dialog').style.display = 'none';
 }
 document.getElementById('confirm-app-name').addEventListener('input', function() {
   document.getElementById('confirm-import-btn').disabled = this.value !== '{{ app.slug }}';
