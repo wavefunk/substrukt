@@ -393,8 +393,11 @@
       resetSubmitSpinners();
       var titleEl = document.getElementById('page-title');
       if (titleEl) {
-        document.title = titleEl.textContent.trim();
+        var fullTitle = titleEl.textContent.trim();
+        document.title = fullTitle;
         titleEl.remove();
+        var label = fullTitle.replace(/\s*—\s*Substrukt$/, '');
+        if (label) wfEcho('Switched to '+label + '.');
       }
     });
     document.body.addEventListener('htmx:afterSettle', function() {
