@@ -7308,7 +7308,7 @@ async fn users_page_lists_registered_users() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.text().await.unwrap();
 
-    assert!(body.contains("Registered Users"));
+    assert!(body.contains("<span class=\"wf-panel-title\">Users</span>"));
     assert!(body.contains(">admin<"));
 }
 

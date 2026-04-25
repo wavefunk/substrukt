@@ -123,6 +123,23 @@ pub async fn take_flash(session: &Session) -> Option<(String, String)> {
     }
 }
 
+pub fn flash_echo_trigger(
+    flash: &Option<(String, String)>,
+) -> Option<axum_htmx::HxResponseTrigger> {
+    let (kind, msg) = flash.as_ref()?;
+    let echo_kind = match kind.as_str() {
+        "success" => "ok",
+        "error" => "err",
+        _ => return None,
+    };
+    let event = axum_htmx::HxEvent::new_with_data(
+        "wfEcho",
+        serde_json::json!({"kind": echo_kind, "msg": msg}),
+    )
+    .ok()?;
+    Some(axum_htmx::HxResponseTrigger::after_settle([event]))
+}
+
 /// Get or create a CSRF token for this session.
 pub async fn ensure_csrf_token(session: &Session) -> String {
     if let Ok(Some(token)) = session.get::<String>(CSRF_KEY).await {

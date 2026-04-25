@@ -33,7 +33,7 @@ async fn list_schemas(
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let schemas =
         schema::list_schemas(&schemas_dir).map_err(|e| format!("Failed to list schemas: {e}"))?;
@@ -59,6 +59,7 @@ async fn list_schemas(
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
     let user_role = &role.0;
     let current_username = user
         .username
@@ -85,7 +86,7 @@ async fn list_schemas(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 async fn new_schema_page(

@@ -140,6 +140,8 @@ async fn list_entries(
     let entries = result.entries;
     let has_prev = page > 1;
     let has_next = page < total_pages;
+    let page_start = if entries.is_empty() { 0 } else { (page - 1) * PAGE_SIZE + 1 };
+    let page_end = if entries.is_empty() { 0 } else { page_start + entries.len() - 1 };
 
     let columns = get_display_columns(&schema_file.schema);
 
@@ -183,6 +185,7 @@ async fn list_entries(
     let user_role = &role.0;
     let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
     let tmpl = state
         .templates
         .acquire_env()
@@ -209,6 +212,8 @@ async fn list_entries(
             sort_order => sort_order,
             total => total,
             filtered => filtered,
+            page_start => page_start,
+            page_end => page_end,
             page => page,
             has_prev => has_prev,
             has_next => has_next,
@@ -216,7 +221,7 @@ async fn list_entries(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok((echo, Html(html)).into_response())
 }
 
 fn get_display_columns(schema: &serde_json::Value) -> Vec<(String, String)> {
@@ -534,9 +539,10 @@ async fn edit_entry_page(
     session: Session,
     app: AppContext,
     Path((_app_slug, schema_slug, entry_id)): Path<(String, String, String)>,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
     let schema_file = schema::get_schema(&schemas_dir, &schema_slug)
@@ -602,7 +608,7 @@ async fn edit_entry_page(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 async fn create_entry(
@@ -1054,6 +1060,13 @@ async fn publish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
+        let echo = axum_htmx::HxResponseTrigger::after_settle([
+            axum_htmx::HxEvent::new_with_data(
+                "wfEcho",
+                serde_json::json!({"kind": "ok", "msg": "Entry published."}),
+            )
+            .unwrap(),
+        ]);
         let tmpl = state
             .templates
             .acquire_env()
@@ -1075,7 +1088,7 @@ async fn publish_entry(
             })
             .map_err(|e| format!("Render error: {e}"))
             .unwrap();
-        return Html(html).into_response();
+        return (echo, Html(html)).into_response();
     }
 
     auth::set_flash(&session, "success", "Entry published").await;
@@ -1145,6 +1158,13 @@ async fn unpublish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
+        let echo = axum_htmx::HxResponseTrigger::after_settle([
+            axum_htmx::HxEvent::new_with_data(
+                "wfEcho",
+                serde_json::json!({"kind": "ok", "msg": "Entry unpublished."}),
+            )
+            .unwrap(),
+        ]);
         let tmpl = state
             .templates
             .acquire_env()
@@ -1166,7 +1186,7 @@ async fn unpublish_entry(
             })
             .map_err(|e| format!("Render error: {e}"))
             .unwrap();
-        return Html(html).into_response();
+        return (echo, Html(html)).into_response();
     }
 
     auth::set_flash(&session, "success", "Entry unpublished").await;

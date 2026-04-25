@@ -53,11 +53,12 @@ async fn list_apps(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     let user_role = role.0.clone();
     let current_username = username_str(&user);
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
 
     let apps = if user_role == "admin" {
         models::list_apps(&state.pool)
@@ -103,7 +104,7 @@ async fn list_apps(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 async fn new_app_form(
@@ -210,7 +211,7 @@ async fn app_settings(
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
         return Err((
             axum::http::StatusCode::FORBIDDEN,
@@ -222,6 +223,7 @@ async fn app_settings(
     let user_role = &role.0;
     let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
 
     // Build user list from allowthem users with app access info
     let all_users = state.ath.db().list_users().await.unwrap_or_default();
@@ -288,7 +290,7 @@ async fn app_settings(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 #[derive(serde::Deserialize)]
@@ -506,7 +508,7 @@ async fn data_page(
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
         return Err((
             axum::http::StatusCode::FORBIDDEN,
@@ -518,6 +520,7 @@ async fn data_page(
     let user_role = &role.0;
     let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
 
     let data_result = flash.as_ref().and_then(|(k, v)| {
         if k == "data_result" {
@@ -545,7 +548,7 @@ async fn data_page(
             data_result => data_result,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 async fn import_data(

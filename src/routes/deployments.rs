@@ -65,6 +65,7 @@ async fn list_deployments(
         .map(|u| u.as_str().to_string())
         .unwrap_or_default();
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
 
     let deployments = state
         .audit
@@ -151,7 +152,7 @@ async fn list_deployments(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok((echo, Html(html)).into_response())
 }
 
 async fn new_deployment_form(

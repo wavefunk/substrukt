@@ -64,6 +64,7 @@ async fn users_page(
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
 
     let inv_data: Vec<minijinja::Value> = invitations
         .iter()
@@ -110,7 +111,7 @@ async fn users_page(
             flash_message => flash.as_ref().map(|(_, m)| m.as_str()),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok((echo, Html(html)).into_response())
 }
 
 #[derive(serde::Deserialize)]
@@ -379,10 +380,9 @@ async fn profile_page(
     session: Session,
 ) -> axum::response::Result<axum::response::Response> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
-    let (flash_kind, flash_message) = match auth::take_flash(&session).await {
-        Some((kind, msg)) => (kind, msg),
-        None => (String::new(), String::new()),
-    };
+    let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
+    let (flash_kind, flash_message) = flash.unwrap_or_default();
     let user_role = &role.0;
     let current_username = username_str(&user);
 
@@ -404,7 +404,7 @@ async fn profile_page(
             flash_message => flash_message,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok((echo, Html(html)).into_response())
 }
 
 #[derive(serde::Deserialize)]
@@ -692,6 +692,8 @@ async fn audit_log_page(
         .list_audit_log(action_filter, actor_filter, None, date_from, date_to, page)
         .await
         .map_err(|e| format!("DB error: {e}"))?;
+    let page_start = if entries.is_empty() { 0 } else { (page as usize - 1) * 100 + 1 };
+    let page_end = if entries.is_empty() { 0 } else { page_start + entries.len() - 1 };
 
     let actors = state
         .audit
@@ -790,6 +792,8 @@ async fn audit_log_page(
             filter_date_to => filter.date_to,
             pagination_qs => pagination_qs,
             page => page,
+            page_start => page_start,
+            page_end => page_end,
             has_next => has_next,
             has_prev => page > 1,
         })
@@ -805,7 +809,7 @@ async fn backups_page(
     HxRequest(is_htmx): HxRequest,
     State(state): State<AppState>,
     session: Session,
-) -> axum::response::Result<Html<String>> {
+) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
         return Err((
             axum::http::StatusCode::FORBIDDEN,
@@ -891,11 +895,9 @@ async fn backups_page(
     })
     .collect();
 
-    // Flash message
-    let (flash_kind, flash_message) = match auth::take_flash(&session).await {
-        Some((kind, msg)) => (kind, msg),
-        None => (String::new(), String::new()),
-    };
+    let flash = auth::take_flash(&session).await;
+    let echo = auth::flash_echo_trigger(&flash);
+    let (flash_kind, flash_message) = flash.unwrap_or_default();
 
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let user_role = &role.0;
@@ -952,7 +954,7 @@ async fn backups_page(
             flash_message => flash_message,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok((echo, Html(html)).into_response())
 }
 
 #[derive(serde::Deserialize)]

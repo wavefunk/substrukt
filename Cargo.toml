@@ -6,7 +6,7 @@ repository = "https://github.com/wavefunk/substrukt"
 
 [dependencies]
 axum = { version = "0.8", features = ["multipart"] }
-axum-htmx = "0.8"
+axum-htmx = { version = "0.8", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 color-eyre = "0.6"

@@ -344,6 +344,8 @@ checksum = "a2d4a162b7621482903309c0e8a990a866728b6312350147181230f840252314"
 dependencies = [
  "axum-core",
  "http",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
