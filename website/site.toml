@@ -1,0 +1,16 @@
+[site]
+name = "Substrukt"
+base_url = "https://substrukt.dev"
+
+[build]
+fragments = false
+minify = true
+clean_urls = true
+
+[build.bundling]
+enabled = true
+css = true
+tree_shake_css = true
+
+[sitemap]
+enabled = true

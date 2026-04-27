@@ -1,0 +1,5 @@
+- label: Docs
+  url: /docs/introduction
+- label: GitHub
+  url: https://github.com/wavefunk/substrukt
+  external: true

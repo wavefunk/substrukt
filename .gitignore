@@ -14,3 +14,5 @@
 .playwright-cli/
 .playwright/
 tasks.org
+website/dist/
+website/.eigen_cache/
