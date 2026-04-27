@@ -1,0 +1,17 @@
+- title: Schema-driven forms
+  body: Define content types with JSON Schema. The UI generates forms automatically from your schema, including nested objects, arrays, and file uploads.
+
+- title: File-based content
+  body: Content is stored as JSON files on disk, not in a database. Easy to inspect, version control, and migrate. In-memory caching keeps reads fast.
+
+- title: REST API
+  body: Every content type gets full CRUD endpoints. Bearer token auth. Export and import bundles for syncing between environments.
+
+- title: Content-addressed uploads
+  body: Files are stored by SHA-256 hash with automatic deduplication. Upload the same file twice, it is stored once.
+
+- title: Single binary
+  body: One Rust binary, no runtime dependencies. SQLite for auth. Templates and static assets are served directly. Docker image included.
+
+- title: Observability
+  body: Prometheus metrics endpoint, structured logging with tracing, and a separate audit log database tracking all mutations.

@@ -1,0 +1,11 @@
+- title: Define a schema
+  body: Create a JSON Schema with an x-substrukt extension that sets the title, slug, and storage mode.
+
+- title: Edit content
+  body: The web UI generates a form from your schema. Create, edit, and delete entries through the browser.
+
+- title: Consume via API
+  body: Content is served as JSON through the REST API. Use bearer tokens for authentication.
+
+- title: Sync and deploy
+  body: Export and import bundles to move content between local and production. Trigger deployment webhooks on changes.
