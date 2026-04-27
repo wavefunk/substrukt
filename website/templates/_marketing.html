@@ -1,0 +1,77 @@
+{% extends "_base.html" %}
+
+{% block head %}
+<style>
+  body { background: var(--bg); }
+  .mk-wrap { max-width: 1240px; margin: 0 auto; border-left: 1px solid var(--hairline); border-right: 1px solid var(--hairline); }
+
+  /* Nav */
+  .mk-nav { padding: 0 32px; }
+
+  /* Hero */
+  .mk-hero { padding: 100px 32px 80px; border-top: 1px solid var(--hairline); position: relative; overflow: hidden; }
+  .mk-hero-grid { position: absolute; inset: 0; opacity: 0.4; background-image: linear-gradient(var(--hairline-dim) 1px, transparent 1px), linear-gradient(90deg, var(--hairline-dim) 1px, transparent 1px); background-size: 64px 64px; pointer-events: none; }
+  .mk-hero-inner { position: relative; z-index: 1; }
+  .mk-hero-eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+  .mk-hero-eyebrow::before { content: ""; width: 24px; height: 1px; background: var(--accent); }
+  .mk-hero h1 { font-family: var(--font-mono); font-size: clamp(56px, 9vw, 112px); font-weight: 800; line-height: 0.95; letter-spacing: -0.03em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 24px; max-width: 16ch; }
+  .mk-hero h1 em { font-style: normal; color: var(--accent); }
+  .mk-hero p { font-size: 17px; line-height: 1.55; color: var(--fg-muted); max-width: 54ch; margin: 0 0 32px; }
+  .mk-hero-cta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .mk-hero-cta .sep { width: 1px; height: 28px; background: var(--hairline); }
+  .mk-hero-cta .shell-line { font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); letter-spacing: 0.04em; }
+  .mk-hero-cta .shell-line .prompt { color: var(--fg-faint); margin-right: 6px; }
+
+  /* Stat strip */
+  .mk-hero-stats { margin-top: 72px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--hairline); position: relative; z-index: 1; }
+  .mk-hero-stats > div { padding: 22px 0; border-right: 1px solid var(--hairline); }
+  .mk-hero-stats > div:last-child { border-right: 0; }
+  .mk-hero-stats .l { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-faint); margin-bottom: 6px; }
+  .mk-hero-stats .v { font-family: var(--font-mono); font-size: 34px; font-weight: 800; color: var(--fg-strong); letter-spacing: -0.02em; }
+
+  /* Sections */
+  .mk-sect { padding: 100px 32px; border-top: 1px solid var(--hairline); }
+  .mk-sect-head { display: grid; grid-template-columns: 1fr 2fr; gap: 40px; margin-bottom: 48px; align-items: end; }
+  .mk-sect-kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+  .mk-sect-title { font-family: var(--font-mono); font-size: clamp(32px, 4vw, 44px); font-weight: 800; letter-spacing: -0.02em; text-transform: uppercase; color: var(--fg-strong); margin: 0; line-height: 1; max-width: 14ch; }
+  .mk-sect-sub { font-size: 16px; line-height: 1.6; color: var(--fg-muted); max-width: 52ch; margin: 0; }
+  @media (max-width: 900px) { .mk-sect-head { grid-template-columns: 1fr; } }
+
+  /* Feature grid */
+  .mk-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--hairline); border-left: 1px solid var(--hairline); }
+  .mk-feat { padding: 32px; border-right: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); min-height: 240px; display: flex; flex-direction: column; }
+  .mk-feat-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--fg-faint); margin-bottom: 40px; }
+  .mk-feat-t { font-family: var(--font-mono); font-size: 20px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 10px; }
+  .mk-feat-b { font-size: 13px; line-height: 1.65; color: var(--fg-muted); margin: 0; }
+  @media (max-width: 900px) { .mk-features { grid-template-columns: 1fr; } }
+
+  /* How it works grid */
+  .mk-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--hairline); border-left: 1px solid var(--hairline); }
+  .mk-step { padding: 32px; border-right: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+  .mk-step-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--fg-faint); margin-bottom: 20px; }
+  .mk-step-t { font-family: var(--font-mono); font-size: 16px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; color: var(--fg-strong); margin: 0 0 10px; }
+  .mk-step-b { font-size: 13px; line-height: 1.65; color: var(--fg-muted); margin: 0; }
+  @media (max-width: 900px) { .mk-steps { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .mk-steps { grid-template-columns: 1fr; } }
+
+  /* Quick start code */
+  .mk-code pre { background: var(--ink-100); border: 1px solid var(--hairline-dim); padding: 20px 24px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: var(--fg); overflow-x: auto; max-width: 720px; }
+  .mk-code pre .comment { color: var(--fg-faint); }
+
+  /* Footer */
+  .mk-foot { padding: 48px 32px 32px; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; }
+  .mk-foot-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-faint); margin-bottom: 14px; }
+  .mk-foot a { display: block; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: var(--fg-muted); text-decoration: none; padding: 4px 0; }
+  .mk-foot a:hover { color: var(--fg-strong); }
+  .mk-colophon { padding: 18px 32px; border-top: 1px solid var(--hairline); display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-faint); }
+  @media (max-width: 900px) { .mk-foot { grid-template-columns: 1fr 1fr; } }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="mk-wrap">
+  {% include "_partials/nav.html" %}
+  {% block content %}{% endblock %}
+  {% include "_partials/footer.html" %}
+</div>
+{% endblock %}

@@ -3,13 +3,29 @@ data:
   nav:
     file: "nav.yaml"
 ---
-{% extends "_base.html" %}
+{% extends "_marketing.html" %}
 
-{% block title %}Substrukt — Schema-driven CMS{% endblock %}
+{% block title %}Substrukt — Schema-driven CMS built in Rust{% endblock %}
 
-{% block body %}
-<div style="padding: 100px 32px; text-align: center;">
-  <h1 style="font-family: var(--font-mono); font-size: 48px; font-weight: 800; text-transform: uppercase; color: var(--fg-strong);">Substrukt</h1>
-  <p style="color: var(--fg-muted); margin-top: 16px;">Build pipeline works.</p>
-</div>
+{% block content %}
+<section class="mk-hero">
+  <div class="mk-hero-grid" aria-hidden="true"></div>
+  <div class="mk-hero-inner">
+    <div class="mk-hero-eyebrow">SUBSTRUKT · OPEN SOURCE CMS</div>
+    <h1>Schema-driven CMS, built in <em>Rust</em>.</h1>
+    <p>Define content types with JSON Schema. Edit through a web UI. Store as files. Serve via API.</p>
+    <div class="mk-hero-cta">
+      <a href="/docs/introduction" class="wf-btn lg primary">Read the docs</a>
+      <a href="https://github.com/wavefunk/substrukt" class="wf-btn lg" target="_blank" rel="noopener">GitHub</a>
+      <span class="sep"></span>
+      <code class="shell-line"><span class="prompt">$</span>docker pull ghcr.io/wavefunk/substrukt</code>
+    </div>
+  </div>
+  <div class="mk-hero-stats">
+    <div><div class="l">RUNTIME</div><div class="v">SINGLE BINARY</div></div>
+    <div><div class="l">SCHEMA</div><div class="v">JSON SCHEMA</div></div>
+    <div><div class="l">DATA</div><div class="v">REST API</div></div>
+    <div><div class="l">STORAGE</div><div class="v">FILES ON DISK</div></div>
+  </div>
+</section>
 {% endblock %}

@@ -1,0 +1,16 @@
+<div class="mk-nav">
+  <div class="wf-mnav" style="padding: 0;">
+    <div class="wf-wordmark">
+      <div style="width: 22px; height: 22px; background: var(--accent); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 800; font-size: 13px;">S</div>
+      <span class="wf-wordmark-name">SUBSTRUKT</span>
+    </div>
+    {% for item in nav %}
+    {% if "external" in item %}
+    <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.label }}</a>
+    {% else %}
+    <a href="{{ item.url }}">{{ item.label }}</a>
+    {% endif %}
+    {% endfor %}
+    <div class="wf-mnav-spacer"></div>
+  </div>
+</div>
