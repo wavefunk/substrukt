@@ -63,9 +63,12 @@
 
 {% block body %}
 <div class="docs">
+  {% block sidebar %}
   {% include "_partials/docs-sidebar.html" %}
+  {% endblock %}
 
-  <main class="docs-main">
+  {% block doc_content %}
+  <main class="docs-main" id="doc-content">
     <div class="wf-crumbs" style="margin-bottom: 14px;">
       <a href="/">HOME</a><span class="sep">/</span>
       <a href="/docs/introduction">DOCS</a><span class="sep">/</span>
@@ -83,7 +86,11 @@
 
     <div class="docs-foot">
       {% if "prev_slug" in doc and doc.prev_slug %}
-      <a href="/docs/{{ doc.prev_slug }}">
+      <a href="/docs/{{ doc.prev_slug }}"
+         hx-get="/_fragments/docs/{{ doc.prev_slug }}/doc_content.html"
+         hx-target="#doc-content"
+         hx-swap="outerHTML"
+         hx-push-url="/docs/{{ doc.prev_slug }}">
         <span class="k">&larr; PREV</span>
         <span class="t">{{ doc.prev_title }}</span>
       </a>
@@ -91,7 +98,11 @@
       <span></span>
       {% endif %}
       {% if "next_slug" in doc and doc.next_slug %}
-      <a href="/docs/{{ doc.next_slug }}" style="text-align: right;">
+      <a href="/docs/{{ doc.next_slug }}" style="text-align: right;"
+         hx-get="/_fragments/docs/{{ doc.next_slug }}/doc_content.html"
+         hx-target="#doc-content"
+         hx-swap="outerHTML"
+         hx-push-url="/docs/{{ doc.next_slug }}">
         <span class="k">NEXT &rarr;</span>
         <span class="t">{{ doc.next_title }}</span>
       </a>
@@ -102,13 +113,15 @@
   </main>
 
   {% include "_partials/docs-toc.html" %}
+  {% endblock %}
 </div>
 
 <script>
-(function() {
+function buildToc() {
   var content = document.getElementById('docs-content');
   var toc = document.getElementById('docs-toc-links');
   if (!content || !toc) return;
+  while (toc.firstChild) toc.removeChild(toc.firstChild);
   var headings = content.querySelectorAll('h2');
   headings.forEach(function(h) {
     var id = h.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -118,6 +131,20 @@
     a.textContent = h.textContent;
     toc.appendChild(a);
   });
-})();
+}
+buildToc();
+document.body.addEventListener('htmx:afterSettle', function() {
+  buildToc();
+  var main = document.getElementById('doc-content');
+  if (main) main.scrollTop = 0;
+  window.scrollTo(0, 0);
+});
+document.addEventListener('click', function(e) {
+  var a = e.target.closest('a[href]');
+  if (!a) return;
+  var href = a.getAttribute('href').replace(/\/+$/, '');
+  var path = window.location.pathname.replace(/\/+$/, '');
+  if (href === path) e.preventDefault();
+});
 </script>
 {% endblock %}

@@ -3,9 +3,15 @@ name = "Substrukt"
 base_url = "https://substrukt.dev"
 
 [build]
-fragments = false
+fragments = true
+fragment_dir = "_fragments"
+content_block = "content"
 minify = true
 clean_urls = true
+oob_blocks = ["sidebar"]
+
+[build.view_transitions]
+enabled = true
 
 [build.bundling]
 enabled = true

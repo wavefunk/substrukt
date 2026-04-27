@@ -1,4 +1,4 @@
-<aside class="docs-side">
+<aside class="docs-side" id="sidebar">
   <div class="docs-side-head">
     <div style="width: 20px; height: 20px; background: var(--accent); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 800; font-size: 12px;">S</div>
     <div>
@@ -10,7 +10,12 @@
   {% for section in docs_nav %}
   <div class="docs-side-section">{{ section.section }}</div>
   {% for page in section.pages %}
-  <a href="/docs/{{ page.slug }}"{% if page.slug == doc.slug %} class="is-active"{% endif %}>{{ page.title }}</a>
+  <a href="/docs/{{ page.slug }}"
+     hx-get="/_fragments/docs/{{ page.slug }}/doc_content.html"
+     hx-target="#doc-content"
+     hx-swap="outerHTML"
+     hx-push-url="/docs/{{ page.slug }}"
+     {% if page.slug == doc.slug %} class="is-active"{% endif %}>{{ page.title }}</a>
   {% endfor %}
   {% endfor %}
 </aside>
