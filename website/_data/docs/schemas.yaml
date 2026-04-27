@@ -1,0 +1,97 @@
+slug: schemas
+title: "Schemas"
+section: "User Guide"
+lede: ""
+prev_slug: "configuration"
+prev_title: "Configuration"
+next_slug: "field-types"
+next_title: "Field Types"
+body: |
+  
+  Schemas are the core building block of Substrukt. Each schema defines a content type -- its fields, validation rules, and storage behavior. Schemas are standard JSON Schema documents with an `x-substrukt` extension for CMS-specific metadata.
+  
+  ## Schema structure
+  
+  A schema has two parts:
+  
+  1. **`x-substrukt`** -- metadata that tells Substrukt how to handle this content type
+  2. **Standard JSON Schema** -- defines the fields, types, and validation rules
+  
+  ```json
+  {
+    "x-substrukt": {
+      "title": "Blog Posts",
+      "slug": "blog-posts",
+      "storage": "directory",
+      "kind": "collection"
+    },
+    "type": "object",
+    "properties": {
+      "title": { "type": "string", "title": "Title" },
+      "body": { "type": "string", "format": "textarea", "title": "Body" },
+      "category": {
+        "type": "string",
+        "title": "Category",
+        "enum": ["tech", "design", "business"]
+      },
+      "cover": { "type": "string", "format": "upload", "title": "Cover Image" },
+      "published": { "type": "boolean", "title": "Published" }
+    },
+    "required": ["title"]
+  }
+  ```
+  
+  ## x-substrukt metadata
+  
+  | Field | Required | Default | Description |
+  |-------|----------|---------|-------------|
+  | `title` | yes | -- | Display name shown in the UI sidebar and headings |
+  | `slug` | yes | -- | URL-safe identifier used in file paths and API endpoints |
+  | `storage` | no | `directory` | How content is stored on disk: `directory` or `single-file` |
+  | `kind` | no | `collection` | Whether the schema holds multiple entries (`collection`) or a single document (`single`) |
+  | `id_field` | no | auto-detected | Which field to use for generating entry IDs in directory mode |
+  
+  ### Slug rules
+  
+  Slugs must:
+  - Contain only lowercase letters, digits, hyphens, and underscores
+  - Not start with a hyphen or dot
+  - Not contain `..`
+  - Be at most 128 characters
+  
+  ### Entry ID generation
+  
+  In directory mode, each entry needs a filename. Substrukt generates IDs using this logic:
+  
+  1. If `id_field` is set in `x-substrukt`, use the value of that field (slugified)
+  2. Otherwise, find the first `string` property (that isn't an upload) and slugify its value
+  3. If neither works, generate a UUID
+  
+  ## Managing schemas
+  
+  ### Via the web UI
+  
+  1. Go to **Schemas** in the sidebar
+  2. Click **New Schema** to create, or click a schema's **Edit** button
+  3. Edit the JSON Schema in the interactive editor (powered by vanilla-jsoneditor)
+  4. Click **Save**
+  
+  The schema is validated before saving. Errors are displayed inline.
+  
+  ### Via the filesystem
+  
+  Schemas are stored as JSON files at `data/schemas/<slug>.json`. You can create, edit, or delete them directly on disk. Changes are picked up automatically by the file watcher.
+  
+  ### Via the API
+  
+  Schemas are read-only through the API (list and get). To create or modify schemas programmatically, use the import/export mechanism.
+  
+  ## Validation
+  
+  When saving a schema, Substrukt validates:
+  
+  1. The `x-substrukt` extension is present with a title and slug
+  2. The slug is valid (see rules above)
+  3. The document is valid JSON Schema (compiled with `jsonschema`)
+  
+  Content is validated against the schema on every create and update, both through the UI and the API.

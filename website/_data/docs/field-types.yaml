@@ -1,0 +1,157 @@
+slug: field-types
+title: "Field Types"
+section: "User Guide"
+lede: ""
+prev_slug: "schemas"
+prev_title: "Schemas"
+next_slug: "storage-modes"
+next_title: "Storage Modes"
+body: |
+  
+  Substrukt generates UI form elements from JSON Schema property definitions. Each combination of `type` and `format` maps to a specific HTML input.
+  
+  ## Supported types
+  
+  | JSON Schema | Format | UI Element | Stored as |
+  |-------------|--------|------------|-----------|
+  | `"type": "string"` | (none) | Text input | `"value"` |
+  | `"type": "string"` | `"textarea"` | Multi-line textarea | `"value"` |
+  | `"type": "string"` | `"upload"` | File input | `{"hash": "...", "filename": "...", "mime": "..."}` |
+  | `"type": "string"` + `"enum"` | (none) | Select dropdown | `"value"` |
+  | `"type": "number"` | (none) | Number input (decimal) | `1.5` |
+  | `"type": "integer"` | (none) | Number input (whole) | `42` |
+  | `"type": "boolean"` | (none) | Checkbox | `true` / `false` |
+  | `"type": "object"` | (none) | Nested fieldset | `{ ... }` |
+  | `"type": "array"` | (none) | Repeatable field group | `[ ... ]` |
+  
+  ## String fields
+  
+  A basic text input:
+  
+  ```json
+  {
+    "title": { "type": "string", "title": "Title" }
+  }
+  ```
+  
+  ### Textarea
+  
+  For longer text content, use `format: "textarea"`:
+  
+  ```json
+  {
+    "body": { "type": "string", "format": "textarea", "title": "Body" }
+  }
+  ```
+  
+  This renders as a multi-line textarea with 6 rows.
+  
+  ### Enum (select dropdown)
+  
+  Add an `enum` array to create a dropdown:
+  
+  ```json
+  {
+    "category": {
+      "type": "string",
+      "title": "Category",
+      "enum": ["tech", "design", "business"]
+    }
+  }
+  ```
+  
+  ### Upload
+  
+  Use `format: "upload"` for file fields:
+  
+  ```json
+  {
+    "cover": { "type": "string", "format": "upload", "title": "Cover Image" }
+  }
+  ```
+  
+  Upload fields are stored as objects, not strings. See [File Uploads](./uploads.md) for details.
+  
+  ## Number fields
+  
+  ```json
+  {
+    "price": { "type": "number", "title": "Price" },
+    "quantity": { "type": "integer", "title": "Quantity" }
+  }
+  ```
+  
+  `number` allows decimals (`step="any"`), `integer` is whole numbers only (`step="1"`).
+  
+  ## Boolean fields
+  
+  ```json
+  {
+    "published": { "type": "boolean", "title": "Published" }
+  }
+  ```
+  
+  Rendered as a checkbox. A hidden input ensures `false` is submitted when unchecked.
+  
+  ## Object fields (nested)
+  
+  Objects render as a bordered fieldset containing the nested properties:
+  
+  ```json
+  {
+    "author": {
+      "type": "object",
+      "title": "Author",
+      "properties": {
+        "name": { "type": "string", "title": "Name" },
+        "email": { "type": "string", "title": "Email" }
+      }
+    }
+  }
+  ```
+  
+  Form field names use dot notation: `author.name`, `author.email`.
+  
+  ## Array fields (repeatable)
+  
+  Arrays render as a list of items with "Add Item" and "Remove" buttons:
+  
+  ```json
+  {
+    "tags": {
+      "type": "array",
+      "title": "Tags",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "title": "Tag Name" }
+        }
+      }
+    }
+  }
+  ```
+  
+  Form field names use bracket notation: `tags[0].name`, `tags[1].name`.
+  
+  Items can be added and removed dynamically in the browser. The form template supports any nesting depth.
+  
+  ## Required fields
+  
+  Add field names to the `required` array to mark them as mandatory:
+  
+  ```json
+  {
+    "type": "object",
+    "properties": {
+      "title": { "type": "string", "title": "Title" },
+      "body": { "type": "string", "format": "textarea", "title": "Body" }
+    },
+    "required": ["title"]
+  }
+  ```
+  
+  Required fields show an asterisk (*) in the UI and have the HTML `required` attribute.
+  
+  ## Title property
+  
+  The `title` property on any field controls its label in the UI. If omitted, the property key is used as the label.

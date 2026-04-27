@@ -1,0 +1,75 @@
+slug: single-vs-collection
+title: "Single vs Collection"
+section: "User Guide"
+lede: ""
+prev_slug: "storage-modes"
+prev_title: "Storage Modes"
+next_slug: "content-management"
+next_title: "Content Management"
+body: |
+  
+  The `kind` field in `x-substrukt` controls whether a schema represents a single document or a collection of entries.
+  
+  ## Collection (default)
+  
+  ```json
+  {
+    "x-substrukt": {
+      "kind": "collection"
+    }
+  }
+  ```
+  
+  A collection holds multiple entries. The UI shows a list of entries with "New Entry" and "Delete" actions. The API supports full CRUD:
+  
+  - `GET /api/v1/apps/:app/content/:slug` -- list all entries
+  - `POST /api/v1/apps/:app/content/:slug` -- create an entry
+  - `GET /api/v1/apps/:app/content/:slug/:id` -- get one entry
+  - `PUT /api/v1/apps/:app/content/:slug/:id` -- update one entry
+  - `DELETE /api/v1/apps/:app/content/:slug/:id` -- delete one entry
+  
+  Use collections for: blog posts, products, team members, FAQ items.
+  
+  ## Single
+  
+  ```json
+  {
+    "x-substrukt": {
+      "kind": "single"
+    }
+  }
+  ```
+  
+  A single schema holds exactly one document. The UI skips the list view and goes directly to the edit form. There is no "New" or "Delete" button -- you just edit the one document.
+  
+  The API uses a different endpoint pattern:
+  
+  - `GET /api/v1/apps/:app/content/:slug/single` -- get the document
+  - `PUT /api/v1/apps/:app/content/:slug/single` -- create or update the document
+  - `DELETE /api/v1/apps/:app/content/:slug/single` -- delete the document
+  
+  Creating entries via `POST /api/v1/apps/:app/content/:slug` returns a 400 error for single schemas.
+  
+  Use singles for: site settings, homepage content, about page, footer configuration.
+  
+  ### Example
+  
+  ```json
+  {
+    "x-substrukt": {
+      "title": "Site Settings",
+      "slug": "site-settings",
+      "kind": "single"
+    },
+    "type": "object",
+    "properties": {
+      "site_name": { "type": "string", "title": "Site Name" },
+      "tagline": { "type": "string", "title": "Tagline" },
+      "logo": { "type": "string", "format": "upload", "title": "Logo" },
+      "analytics_id": { "type": "string", "title": "Analytics ID" }
+    },
+    "required": ["site_name"]
+  }
+  ```
+  
+  This creates a single editable document for site-wide settings, accessed in the sidebar as "Site Settings" and via the API at `/api/v1/apps/:app/content/site-settings/single`.

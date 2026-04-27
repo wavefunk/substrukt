@@ -1,0 +1,69 @@
+slug: api-sync
+title: "Sync API"
+section: "API Reference"
+lede: ""
+prev_slug: "api-uploads"
+prev_title: "Uploads API"
+next_slug: "api-publish"
+next_title: "Deployments API"
+body: |
+  
+  Export and import content bundles via the API. All sync endpoints are scoped to an app and require admin role.
+  
+  ## Export
+  
+  ```
+  POST /api/v1/apps/:app_slug/export
+  ```
+  
+  Downloads a tar.gz bundle containing all schemas, content, and uploads for the app.
+  
+  ```sh
+  curl -X POST \
+    -H "Authorization: Bearer $TOKEN" \
+    http://localhost:3000/api/v1/apps/my-app/export \
+    -o backup.tar.gz
+  ```
+  
+  Response headers:
+  
+  ```
+  Content-Type: application/gzip
+  Content-Disposition: attachment; filename="bundle.tar.gz"
+  ```
+  
+  ## Import
+  
+  ```
+  POST /api/v1/apps/:app_slug/import
+  Content-Type: multipart/form-data
+  ```
+  
+  Uploads and extracts a tar.gz bundle, replacing existing app content.
+  
+  ```sh
+  curl -X POST \
+    -H "Authorization: Bearer $TOKEN" \
+    -F "bundle=@backup.tar.gz" \
+    http://localhost:3000/api/v1/apps/my-app/import
+  ```
+  
+  Response:
+  
+  ```json
+  {
+    "status": "ok",
+    "warnings": [
+      "blog-posts/bad-entry: /title: \"title\" is a required property"
+    ]
+  }
+  ```
+  
+  The `warnings` array lists any content validation issues found during import. The import proceeds regardless of validation warnings -- data is still imported.
+  
+  After import:
+  - Upload metadata is synced to SQLite (from manifest or legacy sidecars)
+  - Upload references are rebuilt from content files
+  - The in-memory cache is fully rebuilt
+  
+  See [Import and Export](./import-export.md) for the full sync workflow.

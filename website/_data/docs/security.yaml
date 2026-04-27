@@ -1,0 +1,94 @@
+slug: security
+title: "Security"
+section: "Operations"
+lede: ""
+prev_slug: "deployment"
+prev_title: "Deployment"
+next_slug: "observability"
+next_title: "Observability"
+body: |
+  
+  ## Authentication
+  
+  ### Web UI
+  
+  The web UI uses session-based authentication with cookies. Sessions are stored in SQLite via `tower-sessions-sqlx-store`.
+  
+  - First visit redirects to `/setup` if no users exist
+  - Subsequent visits redirect to `/login` if not authenticated
+  - Sessions are managed via secure cookies (when `--secure-cookies` is enabled)
+  
+  ### API
+  
+  API endpoints use bearer token authentication. Tokens are generated as 32 random bytes (hex-encoded, 64 characters) and stored as SHA-256 hashes. The raw token is shown once at creation time and never stored.
+  
+  ### Public paths
+  
+  The following paths do not require authentication:
+  - `/login` and `/setup` -- authentication pages
+  - `/api/v1/*` -- API routes (use bearer tokens instead)
+  - `/uploads/file/*` -- public file serving
+  - `/metrics` -- Prometheus metrics endpoint
+  
+  ## CSRF protection
+  
+  All mutating requests (POST, PUT, DELETE) through the web UI require a valid CSRF token. The token is:
+  
+  1. Generated per-session and stored in the session store
+  2. Included in forms as a hidden `_csrf` field
+  3. Sent in `X-CSRF-Token` header for JavaScript (fetch/DELETE) requests
+  
+  CSRF verification flow:
+  - GET/HEAD/OPTIONS requests pass through
+  - For URL-encoded forms: the `_csrf` field is extracted and verified
+  - For JavaScript requests: the `X-CSRF-Token` header is checked
+  - For multipart forms: handlers verify the `_csrf` field from parsed form data
+  - API routes (under `/api/v1/`) use bearer tokens and are exempt from CSRF
+  
+  Invalid CSRF tokens return `403 Forbidden`.
+  
+  ## Rate limiting
+  
+  Per-IP sliding window rate limiters protect against brute force and abuse:
+  
+  | Endpoint | Limit | Window |
+  |----------|-------|--------|
+  | Login (`/login`) | 10 requests | 1 minute |
+  | API (`/api/v1/*`) | 100 requests | 1 minute |
+  
+  The API rate limit is configurable via `--api-rate-limit` (default: 100). The client IP is determined from the `X-Forwarded-For` header when `--trust-proxy-headers` is enabled. Without this flag, a single global bucket is used.
+  
+  When rate limited, login returns an error page and the API returns `429 Too Many Requests`.
+  
+  ## Input sanitization
+  
+  ### Schema slugs
+  
+  Slugs are validated to contain only:
+  - Lowercase ASCII letters
+  - Digits
+  - Hyphens and underscores
+  
+  Slugs cannot start with a hyphen or dot, cannot contain `..`, and are limited to 128 characters. This prevents path traversal and filesystem issues.
+  
+  ### Upload filenames
+  
+  Uploaded filenames are sanitized:
+  - Directory components stripped (no `/` or `\`)
+  - Non-alphanumeric characters (except `.`, `-`, `_`) replaced with `_`
+  - Leading dots removed
+  - Empty names default to `"upload"`
+  
+  ### Upload hash validation
+  
+  Upload hashes are validated as hexadecimal strings of sufficient length before being used in filesystem paths, preventing path traversal via the upload retrieval endpoints.
+  
+  ## Session cookies
+  
+  The `--secure-cookies` flag sets the `Secure` attribute on session cookies, ensuring they are only sent over HTTPS. Always enable this in production behind TLS.
+  
+  Without `--secure-cookies`, cookies work over plain HTTP (suitable for local development).
+  
+  ## Password hashing
+  
+  User passwords are hashed with Argon2 (via the `argon2` crate) with a random salt generated from `OsRng`.

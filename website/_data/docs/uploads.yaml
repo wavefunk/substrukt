@@ -1,0 +1,105 @@
+slug: uploads
+title: "File Uploads"
+section: "User Guide"
+lede: ""
+prev_slug: "content-management"
+prev_title: "Content Management"
+next_slug: "import-export"
+next_title: "Import and Export"
+body: |
+  
+  Substrukt supports file uploads through a custom `format: "upload"` extension to JSON Schema. Uploaded files are stored using content-addressed storage with SHA-256 hashing, which provides automatic deduplication.
+  
+  ## Defining upload fields
+  
+  Add an upload field to your schema:
+  
+  ```json
+  {
+    "cover_image": {
+      "type": "string",
+      "format": "upload",
+      "title": "Cover Image"
+    }
+  }
+  ```
+  
+  This renders as a file input in the form. When a file is uploaded, it is stored on disk and the field value becomes an object:
+  
+  ```json
+  {
+    "cover_image": {
+      "hash": "a1b2c3d4e5f6...",
+      "filename": "photo.jpg",
+      "mime": "image/jpeg"
+    }
+  }
+  ```
+  
+  ## How storage works
+  
+  1. The file is hashed with SHA-256
+  2. The hash determines the storage path: `data/uploads/<first-2-hex>/<remaining-hex>`
+  3. Upload metadata (hash, filename, MIME type, size) is stored in SQLite
+  4. If an identical file already exists (same hash), the upload is deduplicated -- only one copy is kept
+  
+  ### File serving
+  
+  Uploads are served at:
+  
+  ```
+  /uploads/file/<hash>/<filename>
+  ```
+  
+  The filename in the URL is for display purposes. The hash is what identifies the file. The correct `Content-Type` header is set from the stored MIME type.
+  
+  Upload serving is public (no authentication required), so uploaded files can be referenced directly from frontend applications.
+  
+  ## Editing entries with uploads
+  
+  When editing an entry that already has an upload:
+  
+  - The current file is shown as a link
+  - A hidden input preserves the current upload reference
+  - If you upload a new file, it replaces the reference
+  - If you leave the file input empty, the existing upload is kept
+  
+  ## Upload references
+  
+  Substrukt tracks which content entries reference which uploads via the `upload_references` table in SQLite. This mapping is maintained automatically on content create, update, and delete.
+  
+  Upload reference tracking enables:
+  - Knowing which entries use a given file
+  - Cleaning up references when entries are deleted
+  
+  ## Filename sanitization
+  
+  Uploaded filenames are sanitized:
+  - Path components are stripped (no directory traversal)
+  - Unsafe characters are replaced with underscores
+  - Leading dots are removed (no hidden files)
+  - Empty filenames default to "upload"
+  
+  ## API uploads
+  
+  Files can also be uploaded via the API. The maximum upload size is 50 MB.
+  
+  ```sh
+  curl -X POST \
+    -H "Authorization: Bearer YOUR_TOKEN" \
+    -F "file=@photo.jpg" \
+    http://localhost:3000/api/v1/uploads
+  ```
+  
+  Response:
+  
+  ```json
+  {
+    "hash": "a1b2c3d4...",
+    "filename": "photo.jpg",
+    "mime": "image/jpeg",
+    "size": 245760
+  }
+  ```
+  
+  Use the returned hash when creating content entries via the API. See the [Uploads API](./api-uploads.md) for details.

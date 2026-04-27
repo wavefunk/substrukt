@@ -1,0 +1,98 @@
+slug: webhooks
+title: "Deployments"
+section: "User Guide"
+lede: ""
+prev_slug: "import-export"
+prev_title: "Import and Export"
+next_slug: "api-authentication"
+next_title: "Authentication"
+body: |
+  
+  Substrukt supports configurable deployment targets that fire webhooks when content changes. Deployments are managed per app through the web UI, not via CLI flags.
+  
+  ## Configuration
+  
+  Deployments are created and managed at **Apps > [App] > Deployments** in the web UI. Each deployment target has:
+  
+  | Setting | Description |
+  |---------|-------------|
+  | Name | Display name for the deployment |
+  | Slug | URL-safe identifier |
+  | Webhook URL | URL to POST when the deployment fires |
+  | Auth token | Bearer token sent with webhook requests (optional) |
+  | Include drafts | Whether to include draft content in the deployment |
+  | Auto-deploy | Automatically fire when content changes |
+  | Debounce (seconds) | Minimum time between auto-deploy fires |
+  
+  When an auth token is configured, Substrukt sends it as an `Authorization: Bearer <token>` header with each webhook request.
+  
+  ## How it works
+  
+  ### Manual deployment
+  
+  Deployments can be triggered manually:
+  
+  - **Via the UI**: Click the "Fire" button on the Deployments page
+  - **Via the API**: `POST /api/v1/apps/:app/deployments/:slug/fire` with a bearer token
+  
+  ### Auto-deploy
+  
+  When auto-deploy is enabled on a deployment, a background task monitors for content changes (create, update, delete) in the app. When changes are detected, the webhook fires automatically after the configured debounce period.
+  
+  Each deployment has its own independent background task and debounce timer.
+  
+  ## Webhook payload
+  
+  When fired, Substrukt sends a POST request with a JSON body:
+  
+  ```json
+  {
+    "event_type": "substrukt-deploy",
+    "deployment": "production",
+    "app": "my-app",
+    "triggered_at": "2026-03-13T10:30:00+00:00",
+    "triggered_by": "auto"
+  }
+  ```
+  
+  | Field | Values |
+  |-------|--------|
+  | `event_type` | Always `"substrukt-deploy"` |
+  | `deployment` | The deployment slug |
+  | `app` | The app slug |
+  | `triggered_at` | ISO 8601 timestamp |
+  | `triggered_by` | `"auto"` (auto-deploy) or `"manual"` (UI/API) |
+  
+  ## Error handling
+  
+  - If the webhook URL returns a non-2xx status, the error is logged and the deployment is marked as failed
+  - Webhook fires are logged in the audit log with success/failure status
+  
+  ## Using with CI/CD
+  
+  A common pattern is pointing a deployment webhook at a CI pipeline that rebuilds and deploys your site.
+  
+  ### GitHub Actions
+  
+  To trigger a GitHub Actions `repository_dispatch` workflow, configure the webhook URL and a personal access token (classic with `repo` scope, or fine-grained with Contents write permission):
+  
+  1. Create a deployment in the UI with the webhook URL `https://api.github.com/repos/org/site/dispatches`
+  2. Set the auth token to your GitHub PAT
+  
+  Substrukt's payload includes `event_type: "substrukt-deploy"`, which GitHub uses to match workflows:
+  
+  ```yaml
+  # .github/workflows/deploy.yml
+  on:
+    repository_dispatch:
+      types: [substrukt-deploy]
+  
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: echo "Deployment: ${{ github.event.client_payload.deployment }}"
+  ```
+  
+  The `deployment`, `app`, and `triggered_by` fields are available in the payload for conditional logic.

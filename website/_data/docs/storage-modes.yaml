@@ -1,0 +1,77 @@
+slug: storage-modes
+title: "Storage Modes"
+section: "User Guide"
+lede: ""
+prev_slug: "field-types"
+prev_title: "Field Types"
+next_slug: "single-vs-collection"
+next_title: "Single vs Collection"
+body: |
+  
+  Substrukt supports two storage modes for content, configured in the schema's `x-substrukt.storage` field.
+  
+  ## Directory mode (default)
+  
+  ```json
+  {
+    "x-substrukt": {
+      "storage": "directory"
+    }
+  }
+  ```
+  
+  Each entry is stored as a separate JSON file:
+  
+  ```
+  data/content/blog-posts/
+    my-first-post.json
+    another-post.json
+    some-uuid-here.json
+  ```
+  
+  The filename (without `.json`) is the entry ID. IDs are generated from the content using the [entry ID generation](./schemas.md#entry-id-generation) rules.
+  
+  Directory mode is best for:
+  - Content types with many entries
+  - Entries that change independently
+  - Cases where you want to see individual files in git history
+  
+  ## Single-file mode
+  
+  ```json
+  {
+    "x-substrukt": {
+      "storage": "single-file"
+    }
+  }
+  ```
+  
+  All entries are stored as a JSON array in a single file:
+  
+  ```
+  data/content/faq.json
+  ```
+  
+  The file contains:
+  
+  ```json
+  [
+    {
+      "_id": "uuid-1",
+      "question": "How does this work?",
+      "answer": "..."
+    },
+    {
+      "_id": "uuid-2",
+      "question": "Is it free?",
+      "answer": "..."
+    }
+  ]
+  ```
+  
+  Each entry gets an `_id` field injected automatically (UUID). The `_id` field is hidden from forms.
+  
+  Single-file mode is best for:
+  - Small lists (FAQ items, navigation links, feature lists)
+  - Content that is always loaded together
+  - Ordered collections where all items belong in one file

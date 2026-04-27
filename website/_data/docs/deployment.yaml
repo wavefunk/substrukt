@@ -1,0 +1,150 @@
+slug: deployment
+title: "Deployment"
+section: "Operations"
+lede: ""
+prev_slug: "api-publish"
+prev_title: "Deployments API"
+next_slug: "security"
+next_title: "Security"
+body: |
+  
+  ## Docker
+  
+  The recommended way to deploy Substrukt in production.
+  
+  ### Build the image
+  
+  ```sh
+  docker build -t substrukt .
+  ```
+  
+  The Dockerfile uses a multi-stage build:
+  1. **Builder stage**: Compiles the Rust binary with `cargo build --release` using a nightly Rust image. Dependencies are cached separately for faster rebuilds.
+  2. **Runtime stage**: Copies the binary and templates into a minimal Debian image with only `ca-certificates` installed.
+  
+  ### Run the container
+  
+  ```sh
+  docker run -p 3000:3000 -v substrukt-data:/data substrukt
+  ```
+  
+  All persistent data is stored in the `/data` volume:
+  - `substrukt.db` -- users, sessions, API tokens
+  - `audit.db` -- audit log
+  - `schemas/` -- JSON Schema files
+  - `content/` -- content entries
+  - `uploads/` -- uploaded files
+  
+  ### Configuration
+  
+  Override defaults with command arguments:
+  
+  ```sh
+  docker run -p 8080:8080 \
+    -v substrukt-data:/data \
+    substrukt serve \
+      --data-dir /data \
+      --port 8080 \
+      --secure-cookies
+  ```
+  
+  ### Docker Compose example
+  
+  ```yaml
+  services:
+    substrukt:
+      build: .
+      ports:
+        - "3000:3000"
+      volumes:
+        - substrukt-data:/data
+      command: >
+        serve
+        --data-dir /data
+        --db-path /data/substrukt.db
+        --port 3000
+        --secure-cookies
+      restart: unless-stopped
+  
+  volumes:
+    substrukt-data:
+  ```
+  
+  ## Binary deployment
+  
+  For environments without Docker:
+  
+  ```sh
+  cargo build --release
+  ```
+  
+  Copy the binary and templates directory to your server:
+  
+  ```
+  /opt/substrukt/
+    substrukt          # binary
+    templates/         # template files
+  ```
+  
+  Run it:
+  
+  ```sh
+  /opt/substrukt/substrukt serve \
+    --data-dir /var/lib/substrukt \
+    --secure-cookies
+  ```
+  
+  ### Systemd service
+  
+  ```ini
+  [Unit]
+  Description=Substrukt CMS
+  After=network.target
+  
+  [Service]
+  Type=simple
+  User=substrukt
+  ExecStart=/opt/substrukt/substrukt serve \
+    --data-dir /var/lib/substrukt \
+    --secure-cookies
+  Restart=on-failure
+  RestartSec=5
+  
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  
+  ## Reverse proxy
+  
+  Substrukt listens on `0.0.0.0:3000` by default. In production, place it behind a reverse proxy for TLS termination.
+  
+  ### Nginx example
+  
+  ```nginx
+  server {
+      listen 443 ssl;
+      server_name cms.example.com;
+  
+      ssl_certificate /etc/letsencrypt/live/cms.example.com/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/live/cms.example.com/privkey.pem;
+  
+      location / {
+          proxy_pass http://127.0.0.1:3000;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          client_max_body_size 100M;
+      }
+  }
+  ```
+  
+  When using HTTPS, pass `--secure-cookies` to Substrukt so that session cookies have the `Secure` flag set.
+  
+  ## Production checklist
+  
+  - [ ] Use `--secure-cookies` when behind HTTPS
+  - [ ] Set `X-Forwarded-For` header in your reverse proxy and use `--trust-proxy-headers` (used for rate limiting)
+  - [ ] Mount persistent storage for `/data` (Docker) or `--data-dir` (binary)
+  - [ ] Back up `substrukt.db` regularly (contains users and tokens), or configure S3 backups via the UI
+  - [ ] Set `RUST_LOG=substrukt=info` for production logging level
+  - [ ] Configure deployment targets in the UI if using the deploy workflow

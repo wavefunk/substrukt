@@ -1,0 +1,84 @@
+slug: api-schemas
+title: "Schemas API"
+section: "API Reference"
+lede: ""
+prev_slug: "api-authentication"
+prev_title: "Authentication"
+next_slug: "api-content"
+next_title: "Content API"
+body: |
+  
+  Read-only access to schema definitions.
+  
+  ## List schemas
+  
+  ```
+  GET /api/v1/apps/:app_slug/schemas
+  ```
+  
+  Returns all schemas.
+  
+  ### Response
+  
+  ```json
+  [
+    {
+      "title": "Blog Posts",
+      "slug": "blog-posts",
+      "storage": "directory",
+      "kind": "collection",
+      "schema": { ... }
+    },
+    {
+      "title": "Site Settings",
+      "slug": "site-settings",
+      "storage": "directory",
+      "kind": "single",
+      "schema": { ... }
+    }
+  ]
+  ```
+  
+  Each object includes the full JSON Schema document in the `schema` field.
+  
+  ### Example
+  
+  ```sh
+  curl -H "Authorization: Bearer $TOKEN" \
+    http://localhost:3000/api/v1/apps/my-app/schemas
+  ```
+  
+  ## Get a schema
+  
+  ```
+  GET /api/v1/apps/:app_slug/schemas/:slug
+  ```
+  
+  Returns the full JSON Schema document for a single schema.
+  
+  ### Response
+  
+  ```json
+  {
+    "x-substrukt": {
+      "title": "Blog Posts",
+      "slug": "blog-posts",
+      "storage": "directory"
+    },
+    "type": "object",
+    "properties": {
+      "title": { "type": "string", "title": "Title" },
+      "body": { "type": "string", "format": "textarea" }
+    },
+    "required": ["title"]
+  }
+  ```
+  
+  ### Example
+  
+  ```sh
+  curl -H "Authorization: Bearer $TOKEN" \
+    http://localhost:3000/api/v1/apps/my-app/schemas/blog-posts
+  ```
+  
+  Returns `404` if the schema does not exist.

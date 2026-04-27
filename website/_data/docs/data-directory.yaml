@@ -1,0 +1,136 @@
+slug: data-directory
+title: "Data Directory Layout"
+section: "Reference"
+lede: ""
+prev_slug: "observability"
+prev_title: "Observability"
+next_slug: "architecture"
+next_title: "Architecture"
+body: |
+  
+  All persistent data lives under the data directory (default: `data/`, configurable via `--data-dir`).
+  
+  ```
+  data/
+    substrukt.db                  # Main SQLite database
+    audit.db                      # Audit log, deployments, backup config
+    <app-slug>/                   # Per-app data directory
+      schemas/                    # JSON Schema files
+        blog-posts.json
+        site-settings.json
+        faq.json
+      content/                    # Content entries
+        blog-posts/               # Directory mode: one file per entry
+          my-first-post.json
+          another-post.json
+        site-settings/            # Single kind uses directory mode internally
+          _single.json
+        faq.json                  # Single-file mode: all entries in one file
+      uploads/                    # Content-addressed file storage
+        a1/                       # First 2 hex chars of SHA-256 hash
+          b2c3d4e5f6...           # Remaining hash chars (file data)
+      _history/                   # Version history snapshots
+        blog-posts/
+          my-first-post/
+            1711900000.json       # Timestamp-named snapshots
+  ```
+  
+  ## Multi-app structure
+  
+  Each app gets its own subdirectory under the data directory. The `default` app is created automatically on first run. Apps are managed through the web UI.
+  
+  ## Databases
+  
+  ### substrukt.db
+  
+  The main SQLite database. Stores:
+  
+  - **users** -- usernames, Argon2 password hashes, and roles (admin, editor, viewer)
+  - **sessions** -- active login sessions (managed by tower-sessions)
+  - **apps** -- registered apps with slugs and names
+  - **api_tokens** -- hashed bearer tokens with names, scoped to apps
+  - **uploads** -- upload metadata (hash, filename, MIME type, size, app ID)
+  - **upload_references** -- mapping of which content entries reference which uploads
+  
+  This database is created automatically on first run. Migrations run at startup.
+  
+  ### audit.db
+  
+  A separate SQLite database for audit logging and deployment configuration. Stores:
+  
+  - **audit_log** -- timestamped records of all mutations
+  - **deployments** -- deployment targets per app (webhook URL, auth token, auto-deploy settings)
+  - **backup_config** -- S3 backup frequency and retention settings
+  
+  Separated from the main database so audit writes (async) don't contend with request-handling queries.
+  
+  ## Schemas directory
+  
+  Each schema is a single JSON file named `<slug>.json`. The file contains the full JSON Schema document including the `x-substrukt` extension.
+  
+  ## Content directory
+  
+  Content layout depends on the schema's storage mode:
+  
+  ### Directory mode
+  
+  ```
+  <app-slug>/content/<slug>/
+    <entry-id>.json
+  ```
+  
+  Each entry is a standalone JSON object.
+  
+  ### Single-file mode
+  
+  ```
+  <app-slug>/content/<slug>.json
+  ```
+  
+  All entries in a JSON array, each with an `_id` field.
+  
+  ### Single kind
+  
+  Single schemas (where `kind: "single"`) use directory mode with a fixed entry ID of `_single`:
+  
+  ```
+  <app-slug>/content/<slug>/
+    _single.json
+  ```
+  
+  ## Uploads directory
+  
+  Files are stored by their SHA-256 hash split into a 2-character prefix and the remaining characters:
+  
+  ```
+  <app-slug>/uploads/
+    <hash[0..2]>/
+      <hash[2..]>       # The file data
+  ```
+  
+  This directory structure prevents any single directory from having too many files. Upload metadata (original filename, MIME type, size) is stored in `substrukt.db`, not on the filesystem.
+  
+  ## Version history
+  
+  Content version snapshots are stored as timestamped JSON files:
+  
+  ```
+  <app-slug>/_history/
+    <schema-slug>/
+      <entry-id>/
+        <unix-timestamp>.json
+  ```
+  
+  The number of versions kept per entry is configurable via `--version-history-count` (default: 10).
+  
+  ## Backup
+  
+  To back up a Substrukt instance, you need:
+  
+  1. The data directory (app directories with schemas, content, uploads)
+  2. `substrukt.db` (users, tokens, apps)
+  3. Optionally, `audit.db` (audit history, deployment config)
+  
+  Or configure S3-compatible backups through **Settings > Backups** in the web UI. S3 backups archive all app directories plus both SQLite databases as a single tar.gz.
+  
+  You can also use `substrukt export --app <slug>` to create a tar.gz bundle of a single app's schemas, content, and uploads. Note that the export does not include users, tokens, or deployment configuration.

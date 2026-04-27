@@ -1,0 +1,70 @@
+slug: content-management
+title: "Content Management"
+section: "User Guide"
+lede: ""
+prev_slug: "single-vs-collection"
+prev_title: "Single vs Collection"
+next_slug: "uploads"
+next_title: "File Uploads"
+body: |
+  
+  ## The dashboard
+  
+  The dashboard (`/`) shows a summary: total schema count and total entry count across all content types. Content types are listed in the sidebar for quick navigation.
+  
+  ## Working with entries
+  
+  ### Creating an entry
+  
+  1. Click a content type in the sidebar
+  2. Click **New Entry**
+  3. Fill in the form (generated from the schema)
+  4. Click **Save**
+  
+  For schemas with `kind: "single"`, clicking the content type in the sidebar goes directly to the edit form.
+  
+  ### Editing an entry
+  
+  1. Click a content type in the sidebar
+  2. Click **Edit** next to the entry
+  3. Modify the fields
+  4. Click **Save**
+  
+  ### Deleting an entry
+  
+  1. Click a content type in the sidebar
+  2. Click **Delete** next to the entry
+  3. The entry is removed immediately (no confirmation dialog in the current UI)
+  
+  ### Entry list
+  
+  The entry list shows up to 4 columns from the schema's properties. It picks the first 4 fields that are simple types (string, number, integer, boolean) -- upload and nested fields are excluded from the list view.
+  
+  ## How content is stored
+  
+  Content is stored as plain JSON files on disk. The file structure depends on the [storage mode](./storage-modes.md):
+  
+  - **Directory mode**: `data/<app-slug>/content/<slug>/<entry-id>.json`
+  - **Single-file mode**: `data/<app-slug>/content/<slug>.json`
+  
+  You can edit these files directly on disk. A file watcher detects changes and updates the in-memory cache automatically.
+  
+  ## Content validation
+  
+  Every create and update operation validates the content against its schema. Validation runs both in the UI and via the API. Errors are displayed inline in the form or returned as a JSON array in API responses.
+  
+  Upload fields are treated specially during validation: the schema says `"type": "string"` but the stored value is an object (`{hash, filename, mime}`). Substrukt patches the schema at validation time to accept either format.
+  
+  ## In-memory cache
+  
+  Content is loaded into a `DashMap` (concurrent hash map) on startup. The cache is keyed by `<app-slug>/<schema-slug>/<entry-id>`. Cache updates happen:
+  
+  - On create/update/delete via the UI or API
+  - On file system changes detected by the file watcher
+  - On import (full cache rebuild)
+  
+  The cache is used for the dashboard entry counts and content gauges in Prometheus metrics.
+  
+  ## Flash messages
+  
+  Success messages ("Entry created", "Schema updated") appear as flash notifications after actions. They are stored in the session and consumed on the next page load.
