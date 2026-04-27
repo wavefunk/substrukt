@@ -68,7 +68,8 @@
   {% endblock %}
 
   {% block doc_content %}
-  <main class="docs-main" id="doc-content">
+  <div id="doc-content" style="display: contents;">
+  <main class="docs-main">
     <div class="wf-crumbs" style="margin-bottom: 14px;">
       <a href="/">HOME</a><span class="sep">/</span>
       <a href="/docs/introduction">DOCS</a><span class="sep">/</span>
@@ -113,6 +114,7 @@
   </main>
 
   {% include "_partials/docs-toc.html" %}
+  </div>
   {% endblock %}
 </div>
 
