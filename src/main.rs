@@ -233,7 +233,9 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     db::migration::grandfather_email_verification(&pool).await?;
 
     // Check if any users exist (for setup redirect) — after migration so migrated users count
-    let has_users = !ath.db().list_users().await.unwrap_or_default().is_empty();
+    let has_users = Arc::new(AtomicBool::new(
+        !ath.db().list_users().await.unwrap_or_default().is_empty(),
+    ));
 
     let auth_client: Arc<dyn allowthem_core::AuthClient> = Arc::new(
         allowthem_core::EmbeddedAuthClient::new(ath.clone(), "/login"),
@@ -270,12 +272,14 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     // Auto-assign admin role to the first registered user.
     {
         let ath_events = ath.clone();
+        let has_users_flag = has_users.clone();
         tokio::spawn(async move {
             let mut rx = events_rx;
             while let Some(event) = rx.recv().await {
                 let allowthem_core::AuthEvent::Registered(ref e) = event else {
                     continue;
                 };
+                has_users_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                 let user_count = ath_events
                     .db()
                     .list_users()
@@ -354,7 +358,7 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         ath,
         auth_client,
         email_sender,
-        has_users: AtomicBool::new(has_users),
+        has_users,
     });
 
     // Spawn auto-deploy tasks for all enabled deployments

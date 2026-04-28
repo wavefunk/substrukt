@@ -38,7 +38,7 @@ pub struct AppStateInner {
     pub ath: AllowThem,
     pub auth_client: Arc<dyn AuthClient>,
     pub email_sender: Arc<dyn EmailSender>,
-    pub has_users: AtomicBool,
+    pub has_users: Arc<AtomicBool>,
 }
 
 pub type AppState = Arc<AppStateInner>;

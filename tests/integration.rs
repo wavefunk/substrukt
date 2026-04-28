@@ -108,7 +108,7 @@ impl TestServer {
             ath,
             auth_client,
             email_sender: std::sync::Arc::new(allowthem_core::LogEmailSender) as std::sync::Arc<dyn allowthem_core::EmailSender>,
-            has_users: std::sync::atomic::AtomicBool::new(false),
+            has_users: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
 
         let email_sender: std::sync::Arc<dyn allowthem_core::EmailSender> =
