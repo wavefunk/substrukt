@@ -203,6 +203,46 @@ curl -X PUT \
 DELETE /api/v1/apps/:app_slug/content/:schema_slug/single
 ```
 
+## Richtext fields
+
+Schema fields with `format: "markdown-richtext"` are stored as `{"markdown": "...", "html": "..."}` objects. The API automatically projects these to a plain string in responses:
+
+- **Default**: the `html` value is returned
+- **`?render=raw`**: the `markdown` value is returned
+
+For example, a stored entry:
+
+```json
+{
+  "title": "My Post",
+  "body": {
+    "markdown": "# Hello\n\n![photo](upload:abc123/photo.jpg)",
+    "html": "<h1>Hello</h1>\n<img src=\"upload:abc123/photo.jpg\">"
+  }
+}
+```
+
+Is returned by the API as:
+
+```json
+{
+  "title": "My Post",
+  "body": "<h1>Hello</h1>\n<img src=\"/api/v1/apps/my-app/uploads/abc123/photo.jpg\">"
+}
+```
+
+### Upload URI resolution
+
+Images and links in richtext HTML use the `upload:` URI scheme internally (e.g. `upload:hash/filename`). When returned via the API, these are resolved to the API upload path:
+
+```
+upload:abc123/photo.jpg  →  /api/v1/apps/:app_slug/uploads/abc123/photo.jpg
+```
+
+These paths require bearer token authentication, using the same token as the content request. The resolved paths are root-relative -- prepend your Substrukt instance URL to form the full download URL.
+
+In raw mode (`?render=raw`), the markdown is returned as-is with `upload:` URIs unresolved.
+
 ## Working with uploads in content
 
 When creating or updating content that includes upload fields, use the upload hash reference format:

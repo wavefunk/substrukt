@@ -8,6 +8,8 @@ Substrukt generates UI form elements from JSON Schema property definitions. Each
 | `"type": "string"` | (none) | Text input | `"value"` |
 | `"type": "string"` | `"textarea"` | Multi-line textarea | `"value"` |
 | `"type": "string"` | `"upload"` | File input | `{"hash": "...", "filename": "...", "mime": "..."}` |
+| `"type": "string"` | `"markdown"` | Markdown textarea | `"# heading\n..."` |
+| `"type": "string"` | `"markdown-richtext"` | WYSIWYG rich text editor | `{"markdown": "...", "html": "..."}` |
 | `"type": "string"` + `"enum"` | (none) | Select dropdown | `"value"` |
 | `"type": "number"` | (none) | Number input (decimal) | `1.5` |
 | `"type": "integer"` | (none) | Number input (whole) | `42` |
@@ -62,6 +64,43 @@ Use `format: "upload"` for file fields:
 ```
 
 Upload fields are stored as objects, not strings. See [File Uploads](./uploads.md) for details.
+
+### Markdown
+
+Use `format: "markdown"` for plain markdown editing:
+
+```json
+{
+  "body": { "type": "string", "format": "markdown", "title": "Body" }
+}
+```
+
+Renders as a textarea with markdown preview. Stored as a plain markdown string. When fetched via the API with `?render=html`, the markdown is converted to HTML server-side.
+
+### Rich text (markdown-richtext)
+
+Use `format: "markdown-richtext"` for a WYSIWYG rich text editor:
+
+```json
+{
+  "body": { "type": "string", "format": "markdown-richtext", "title": "Body" }
+}
+```
+
+Opens a full-screen Milkdown editor with support for headings, lists, images, links, code blocks, and more. Images can be dragged into the editor and are uploaded automatically.
+
+Stored as an object with both representations:
+
+```json
+{
+  "body": {
+    "markdown": "# Hello\n\n![photo](upload:abc123def/photo.jpg)",
+    "html": "<h1>Hello</h1>\n<img src=\"upload:abc123def/photo.jpg\">"
+  }
+}
+```
+
+Images in the stored data use the `upload:` URI scheme (e.g. `upload:hash/filename`). When fetched via the API, richtext fields are projected to a plain string and upload URIs are resolved to API paths. See [Content API](./api-content.md#richtext-fields) for details.
 
 ## Number fields
 

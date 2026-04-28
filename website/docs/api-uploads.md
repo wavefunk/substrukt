@@ -51,12 +51,26 @@ Returns the file with the correct `Content-Type` header.
 
 Returns `404` if no upload with that hash exists.
 
-## Public file access
+## Web UI file access
 
-Uploads are also available without authentication at:
+Uploads are also served at:
 
 ```
 /apps/:app_slug/uploads/file/:hash/:filename
 ```
 
-This public URL is used by the web UI to display uploaded images and link to files. The filename in the URL is cosmetic -- the hash is what identifies the file.
+This path requires session authentication and is used by the web UI to display uploaded images. The filename in the URL is cosmetic -- the hash is what identifies the file.
+
+For programmatic access, use the API endpoints above with bearer token authentication.
+
+## The `upload:` URI scheme
+
+Internally, Substrukt uses `upload:hash/filename` as a portable URI scheme for referencing uploads. This appears in stored richtext content (see [Field Types](./field-types.md#rich-text-markdown-richtext)).
+
+When content is fetched via the API, `upload:` URIs in richtext HTML are automatically resolved to API paths:
+
+```
+upload:abc123/photo.jpg  →  /api/v1/apps/:app_slug/uploads/abc123/photo.jpg
+```
+
+You do not need to handle `upload:` URIs yourself when consuming the API.
