@@ -1,0 +1,8 @@
+{
+  "name": "substrukt-editor",
+  "private": true,
+  "dependencies": {
+    "@milkdown/crepe": "^7.20.0",
+    "@milkdown/kit": "^7.20.0"
+  }
+}
