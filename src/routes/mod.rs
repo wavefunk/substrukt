@@ -61,6 +61,7 @@ pub fn build_router(state: AppState, allowthem_auth_router: Router) -> Router {
         )
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
         .nest_service("/static/css", ServeDir::new("static/css"))
+        .nest_service("/static/js", ServeDir::new("static/js"))
         .fallback(not_found)
         .with_state(state);
 
