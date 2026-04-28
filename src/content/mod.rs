@@ -870,6 +870,57 @@ pub fn resolve_upload_uris(html: &str, app_slug: &str) -> String {
     .into_owned()
 }
 
+/// Walk a JSON value and project `markdown-richtext` fields to a plain string.
+/// By default (raw=false) each `{markdown, html}` object is replaced with its `html` string.
+/// When raw=true, the `markdown` string is used instead.
+pub fn project_richtext_fields(data: &mut Value, schema: &Value, raw: bool) {
+    project_richtext_fields_inner(data, schema, raw, 0);
+}
+
+fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, depth: usize) {
+    if depth > MAX_NESTING_DEPTH {
+        return;
+    }
+    let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
+        return;
+    };
+    let Some(obj) = data.as_object_mut() else {
+        return;
+    };
+    for (key, prop_schema) in props {
+        let field_type = prop_schema.get("type").and_then(|t| t.as_str());
+        let format = prop_schema.get("format").and_then(|f| f.as_str());
+
+        match (field_type, format) {
+            (Some("string"), Some("markdown-richtext")) => {
+                let projected = obj.get(key).and_then(|v| {
+                    let obj_val = v.as_object()?;
+                    let key_name = if raw { "markdown" } else { "html" };
+                    obj_val.get(key_name).cloned()
+                });
+                if let Some(val) = projected {
+                    obj.insert(key.clone(), val);
+                }
+            }
+            (Some("object"), _) => {
+                if let Some(nested) = obj.get_mut(key) {
+                    project_richtext_fields_inner(nested, prop_schema, raw, depth + 1);
+                }
+            }
+            (Some("array"), _) => {
+                if let Some(items_schema) = prop_schema.get("items")
+                    && let Some(Value::Array(arr)) = obj.get_mut(key)
+                {
+                    for item in arr.iter_mut() {
+                        project_richtext_fields_inner(item, items_schema, raw, depth + 1);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Walk a JSON value and render all markdown fields to HTML, based on the schema.
 /// Only transforms fields where the schema declares `"type": "string", "format": "markdown"`.
 pub fn render_markdown_fields(data: &mut Value, schema: &Value) {
@@ -2821,5 +2872,57 @@ mod tests {
         let html = r#"<p>The scheme is upload:something/file.txt</p>"#;
         let result = resolve_upload_uris(html, "app");
         assert_eq!(result, html, "should not replace upload: in text content");
+    }
+
+    #[test]
+    fn project_richtext_fields_html_mode() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string" },
+                "body": { "type": "string", "format": "markdown-richtext" }
+            }
+        });
+        let mut data = serde_json::json!({
+            "title": "Hello",
+            "body": {
+                "markdown": "# Hello",
+                "html": "<h1>Hello</h1>"
+            }
+        });
+        project_richtext_fields(&mut data, &schema, false);
+        assert_eq!(data["body"], serde_json::json!("<h1>Hello</h1>"));
+        assert_eq!(data["title"], serde_json::json!("Hello"));
+    }
+
+    #[test]
+    fn project_richtext_fields_raw_mode() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown-richtext" }
+            }
+        });
+        let mut data = serde_json::json!({
+            "body": {
+                "markdown": "# Hello",
+                "html": "<h1>Hello</h1>"
+            }
+        });
+        project_richtext_fields(&mut data, &schema, true);
+        assert_eq!(data["body"], serde_json::json!("# Hello"));
+    }
+
+    #[test]
+    fn project_richtext_fields_null_value() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown-richtext" }
+            }
+        });
+        let mut data = serde_json::json!({ "body": null });
+        project_richtext_fields(&mut data, &schema, false);
+        assert_eq!(data["body"], serde_json::json!(null));
     }
 }
