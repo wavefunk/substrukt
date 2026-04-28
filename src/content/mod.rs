@@ -859,10 +859,19 @@ pub fn render_markdown(input: &str) -> String {
     html_output
 }
 
-/// Resolve `upload:<hash>/<filename>` URIs in HTML `src` and `href` attributes to real URLs.
-/// Replaces `src="upload:hash/file"` with `src="/apps/<app_slug>/uploads/file/hash/file"`.
-/// Text content containing `upload:` is left untouched.
-pub fn resolve_upload_uris(html: &str, app_slug: &str) -> String {
+/// Resolve `upload:<hash>/<filename>` URIs in HTML `src` and `href` attributes
+/// to the API upload path so they work with bearer-token auth.
+pub fn resolve_upload_uris_for_api(html: &str, app_slug: &str) -> String {
+    let re = regex::Regex::new(r#"((?:src|href)=")upload:([^"]+)"#).unwrap();
+    re.replace_all(html, |caps: &regex::Captures| {
+        format!("{}/api/v1/apps/{}/uploads/{}", &caps[1], app_slug, &caps[2])
+    })
+    .into_owned()
+}
+
+/// Resolve `upload:<hash>/<filename>` URIs in HTML `src` and `href` attributes
+/// to the UI upload path (session auth).
+pub fn resolve_upload_uris_for_ui(html: &str, app_slug: &str) -> String {
     let re = regex::Regex::new(r#"((?:src|href)=")upload:([^"]+)"#).unwrap();
     re.replace_all(html, |caps: &regex::Captures| {
         format!("{}/apps/{}/uploads/file/{}", &caps[1], app_slug, &caps[2])
@@ -871,13 +880,14 @@ pub fn resolve_upload_uris(html: &str, app_slug: &str) -> String {
 }
 
 /// Walk a JSON value and project `markdown-richtext` fields to a plain string.
-/// By default (raw=false) each `{markdown, html}` object is replaced with its `html` string.
-/// When raw=true, the `markdown` string is used instead.
-pub fn project_richtext_fields(data: &mut Value, schema: &Value, raw: bool) {
-    project_richtext_fields_inner(data, schema, raw, 0);
+/// By default (raw=false) each `{markdown, html}` object is replaced with its `html` string
+/// and `upload:` URIs are resolved to the API upload path.
+/// When raw=true, the `markdown` string is used instead (URIs left as-is).
+pub fn project_richtext_fields(data: &mut Value, schema: &Value, raw: bool, app_slug: &str) {
+    project_richtext_fields_inner(data, schema, raw, app_slug, 0);
 }
 
-fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, depth: usize) {
+fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, app_slug: &str, depth: usize) {
     if depth > MAX_NESTING_DEPTH {
         return;
     }
@@ -899,12 +909,20 @@ fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, de
                     obj_val.get(key_name).cloned()
                 });
                 if let Some(val) = projected {
-                    obj.insert(key.clone(), val);
+                    if !raw {
+                        if let Some(html) = val.as_str() {
+                            obj.insert(key.clone(), Value::String(resolve_upload_uris_for_api(html, app_slug)));
+                        } else {
+                            obj.insert(key.clone(), val);
+                        }
+                    } else {
+                        obj.insert(key.clone(), val);
+                    }
                 }
             }
             (Some("object"), _) => {
                 if let Some(nested) = obj.get_mut(key) {
-                    project_richtext_fields_inner(nested, prop_schema, raw, depth + 1);
+                    project_richtext_fields_inner(nested, prop_schema, raw, app_slug, depth + 1);
                 }
             }
             (Some("array"), _) => {
@@ -912,7 +930,7 @@ fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, de
                     && let Some(Value::Array(arr)) = obj.get_mut(key)
                 {
                     for item in arr.iter_mut() {
-                        project_richtext_fields_inner(item, items_schema, raw, depth + 1);
+                        project_richtext_fields_inner(item, items_schema, raw, app_slug, depth + 1);
                     }
                 }
             }
@@ -2839,39 +2857,46 @@ mod tests {
     }
 
     #[test]
-    fn resolve_upload_uris_in_src() {
+    fn resolve_upload_uris_for_api_in_src() {
         let html = r#"<img src="upload:abc123/photo.jpg" alt="test">"#;
-        let result = resolve_upload_uris(html, "my-blog");
-        assert_eq!(result, r#"<img src="/apps/my-blog/uploads/file/abc123/photo.jpg" alt="test">"#);
+        let result = resolve_upload_uris_for_api(html, "my-blog");
+        assert_eq!(result, r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg" alt="test">"#);
     }
 
     #[test]
-    fn resolve_upload_uris_multiple() {
+    fn resolve_upload_uris_for_api_multiple() {
         let html = r#"<img src="upload:aaa/a.jpg"><p>text</p><img src="upload:bbb/b.png">"#;
-        let result = resolve_upload_uris(html, "app");
-        assert!(result.contains(r#"src="/apps/app/uploads/file/aaa/a.jpg""#));
-        assert!(result.contains(r#"src="/apps/app/uploads/file/bbb/b.png""#));
+        let result = resolve_upload_uris_for_api(html, "app");
+        assert!(result.contains(r#"src="/api/v1/apps/app/uploads/aaa/a.jpg""#));
+        assert!(result.contains(r#"src="/api/v1/apps/app/uploads/bbb/b.png""#));
     }
 
     #[test]
-    fn resolve_upload_uris_leaves_normal_urls() {
+    fn resolve_upload_uris_for_api_leaves_normal_urls() {
         let html = r#"<img src="https://example.com/photo.jpg" alt="test">"#;
-        let result = resolve_upload_uris(html, "my-blog");
+        let result = resolve_upload_uris_for_api(html, "my-blog");
         assert_eq!(result, html);
     }
 
     #[test]
-    fn resolve_upload_uris_in_href() {
+    fn resolve_upload_uris_for_api_in_href() {
         let html = r#"<a href="upload:abc123/doc.pdf">Download</a>"#;
-        let result = resolve_upload_uris(html, "app");
-        assert_eq!(result, r#"<a href="/apps/app/uploads/file/abc123/doc.pdf">Download</a>"#);
+        let result = resolve_upload_uris_for_api(html, "app");
+        assert_eq!(result, r#"<a href="/api/v1/apps/app/uploads/abc123/doc.pdf">Download</a>"#);
     }
 
     #[test]
-    fn resolve_upload_uris_ignores_text_content() {
+    fn resolve_upload_uris_for_api_ignores_text_content() {
         let html = r#"<p>The scheme is upload:something/file.txt</p>"#;
-        let result = resolve_upload_uris(html, "app");
+        let result = resolve_upload_uris_for_api(html, "app");
         assert_eq!(result, html, "should not replace upload: in text content");
+    }
+
+    #[test]
+    fn resolve_upload_uris_for_ui_in_src() {
+        let html = r#"<img src="upload:abc123/photo.jpg" alt="test">"#;
+        let result = resolve_upload_uris_for_ui(html, "my-blog");
+        assert_eq!(result, r#"<img src="/apps/my-blog/uploads/file/abc123/photo.jpg" alt="test">"#);
     }
 
     #[test]
@@ -2890,9 +2915,27 @@ mod tests {
                 "html": "<h1>Hello</h1>"
             }
         });
-        project_richtext_fields(&mut data, &schema, false);
+        project_richtext_fields(&mut data, &schema, false, "test-app");
         assert_eq!(data["body"], serde_json::json!("<h1>Hello</h1>"));
         assert_eq!(data["title"], serde_json::json!("Hello"));
+    }
+
+    #[test]
+    fn project_richtext_fields_resolves_upload_uris() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "body": { "type": "string", "format": "markdown-richtext" }
+            }
+        });
+        let mut data = serde_json::json!({
+            "body": {
+                "markdown": "![photo](upload:abc123/photo.jpg)",
+                "html": r#"<img src="upload:abc123/photo.jpg">"#
+            }
+        });
+        project_richtext_fields(&mut data, &schema, false, "my-blog");
+        assert_eq!(data["body"], serde_json::json!(r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg">"#));
     }
 
     #[test]
@@ -2909,7 +2952,7 @@ mod tests {
                 "html": "<h1>Hello</h1>"
             }
         });
-        project_richtext_fields(&mut data, &schema, true);
+        project_richtext_fields(&mut data, &schema, true, "test-app");
         assert_eq!(data["body"], serde_json::json!("# Hello"));
     }
 
@@ -2922,7 +2965,7 @@ mod tests {
             }
         });
         let mut data = serde_json::json!({ "body": null });
-        project_richtext_fields(&mut data, &schema, false);
+        project_richtext_fields(&mut data, &schema, false, "test-app");
         assert_eq!(data["body"], serde_json::json!(null));
     }
 }

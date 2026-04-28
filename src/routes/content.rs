@@ -468,27 +468,6 @@ fn warn_dangling_references_inner(
     }
 }
 
-fn resolve_richtext_upload_uris(data: &mut serde_json::Value, schema: &serde_json::Value, app_slug: &str) {
-    let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
-        return;
-    };
-    let Some(obj) = data.as_object_mut() else {
-        return;
-    };
-    for (key, prop_schema) in props {
-        let is_richtext = prop_schema.get("type").and_then(|t| t.as_str()) == Some("string")
-            && prop_schema.get("format").and_then(|f| f.as_str()) == Some("markdown-richtext");
-        if is_richtext {
-            if let Some(field_obj) = obj.get_mut(key).and_then(|v| v.as_object_mut()) {
-                if let Some(html) = field_obj.get("html").and_then(|h| h.as_str()).map(|s| s.to_string()) {
-                    let resolved = content::resolve_upload_uris(&html, app_slug);
-                    field_obj.insert("html".to_string(), serde_json::Value::String(resolved));
-                }
-            }
-        }
-    }
-}
-
 fn schema_has_richtext(schema: &serde_json::Value) -> bool {
     schema
         .get("properties")
@@ -712,8 +691,6 @@ async fn create_entry(
     // Process upload fields
     process_uploads(&state, &app, &mut data, &upload_fields).await;
 
-    resolve_richtext_upload_uris(&mut data, &schema_file.schema, &app.app.slug);
-
     warn_dangling_references(&data, &schema_file.schema, &state.cache, &app.app.slug);
 
     // Validate
@@ -849,8 +826,6 @@ async fn update_entry(
     let mut data = content_form::form_data_to_json(&schema_file.schema, &form_fields, "");
 
     process_uploads(&state, &app, &mut data, &upload_fields).await;
-
-    resolve_richtext_upload_uris(&mut data, &schema_file.schema, &app.app.slug);
 
     warn_dangling_references(&data, &schema_file.schema, &state.cache, &app.app.slug);
 

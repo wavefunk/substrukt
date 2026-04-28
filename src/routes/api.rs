@@ -433,7 +433,7 @@ async fn list_entries(
                     if should_render(&params.render, schema_file.meta.render.as_deref()) {
                         content::render_markdown_fields(&mut d, &schema_file.schema);
                     }
-                    content::project_richtext_fields(&mut d, &schema_file.schema, params.render == "raw");
+                    content::project_richtext_fields(&mut d, &schema_file.schema, params.render == "raw", &app.app.slug);
                     d
                 })
                 .collect();
@@ -487,7 +487,7 @@ async fn get_entry(
             if render {
                 content::render_markdown_fields(&mut data, &schema_file.schema);
             }
-            content::project_richtext_fields(&mut data, &schema_file.schema, params.render == "raw");
+            content::project_richtext_fields(&mut data, &schema_file.schema, params.render == "raw", &app.app.slug);
             // Bypass ETag cache for rendered responses to avoid serving
             // a cached raw-markdown ETag for a rendered response or vice versa
             let cache_key = if render || params.render == "raw" {
@@ -770,7 +770,7 @@ async fn get_single(
             if should_render(&params.render, schema_file.meta.render.as_deref()) {
                 content::render_markdown_fields(&mut data, &schema_file.schema);
             }
-            content::project_richtext_fields(&mut data, &schema_file.schema, params.render == "raw");
+            content::project_richtext_fields(&mut data, &schema_file.schema, params.render == "raw", &app.app.slug);
             Json(data).into_response()
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
