@@ -7,7 +7,6 @@ pub mod schemas;
 pub mod settings;
 pub mod uploads;
 
-use axum::http::header;
 use axum::{
     Router,
     extract::{OriginalUri, Request, State},
@@ -17,7 +16,17 @@ use axum::{
 };
 use axum_htmx::HxRequest;
 use tower_http::catch_panic::CatchPanicLayer;
+
+#[cfg(debug_assertions)]
 use tower_http::services::ServeDir;
+
+#[cfg(not(debug_assertions))]
+use rust_embed::Embed;
+
+#[cfg(not(debug_assertions))]
+#[derive(Embed)]
+#[folder = "static/"]
+struct StaticAssets;
 
 use crate::auth::{require_auth, verify_csrf};
 use crate::metrics;
@@ -54,14 +63,17 @@ pub fn build_router(state: AppState, allowthem_auth_router: Router) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .nest("/api/v1", api_routes)
         .route("/healthz", axum::routing::get(healthz))
-        .route("/static/favicon.svg", axum::routing::get(serve_favicon))
-        .route(
-            "/static/wavefunk.svg",
-            axum::routing::get(serve_wavefunk_logo),
-        )
-        .route("/metrics", axum::routing::get(metrics::metrics_handler))
-        .nest_service("/static/css", ServeDir::new("static/css"))
-        .nest_service("/static/js", ServeDir::new("static/js"))
+        .route("/metrics", axum::routing::get(metrics::metrics_handler));
+
+    #[cfg(debug_assertions)]
+    let core = core
+        .nest_service("/static", ServeDir::new("static"));
+
+    #[cfg(not(debug_assertions))]
+    let core = core
+        .route("/static/{*path}", axum::routing::get(serve_embedded_asset));
+
+    let core = core
         .fallback(not_found)
         .with_state(state);
 
@@ -151,16 +163,24 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
-async fn serve_favicon() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
-        include_str!("../../website/roundedicon.svg"),
-    )
-}
 
-async fn serve_wavefunk_logo() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
-        include_str!("../../website/wavefunk.svg"),
-    )
+#[cfg(not(debug_assertions))]
+async fn serve_embedded_asset(
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> Response {
+    use axum::http::{StatusCode, header};
+
+    match StaticAssets::get(&path) {
+        Some(file) => {
+            let mime = mime_guess::from_path(&path)
+                .first_or_octet_stream()
+                .to_string();
+            (
+                [(header::CONTENT_TYPE, mime)],
+                file.data,
+            )
+                .into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }

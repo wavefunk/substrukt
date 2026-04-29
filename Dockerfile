@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 # Copy manifests and toolchain for dependency caching
 COPY Cargo.toml Cargo.lock rust-toolchain.toml build.rs ./
 
-# Copy templates early (needed by build.rs for minijinja-embed in release)
+# Copy templates and static assets early (embedded in release binary)
 COPY templates/ templates/
+COPY static/ static/
 
 # Create dummy source to cache dependency build
 RUN mkdir src && echo "fn main() {}" > src/main.rs && echo "" > src/lib.rs
@@ -22,6 +23,7 @@ COPY src/ src/
 COPY migrations/ migrations/
 COPY audit_migrations/ audit_migrations/
 COPY templates/ templates/
+COPY static/ static/
 RUN touch src/main.rs src/lib.rs && cargo build --release
 
 # Stage 2: Runtime
@@ -32,8 +34,6 @@ RUN apt-get update && apt-get install -y ca-certificates curl gosu && rm -rf /va
 RUN useradd --create-home --shell /bin/bash --uid 1000 substrukt
 
 COPY --from=builder /build/target/release/substrukt /usr/local/bin/substrukt
-COPY --from=builder /build/templates /opt/substrukt/templates
-COPY static/ /opt/substrukt/static/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /opt/substrukt

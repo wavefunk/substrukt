@@ -1,6 +1,6 @@
 [package]
 name = "substrukt"
-version = "0.14.1"
+version = "0.14.2"
 edition = "2024"
 repository = "https://github.com/wavefunk/substrukt"
 
@@ -46,6 +46,8 @@ rust-s3 = { version = "0.37", default-features = false, features = ["tokio-rustl
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls", "hostname"] }
 regex = "1.12.3"
+rust-embed = "8"
+mime_guess = "2"
 
 [build-dependencies]
 minijinja-embed = "2"
