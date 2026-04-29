@@ -72,12 +72,17 @@ function openEditor(field) {
   }
 
   modal.querySelector('[data-richtext-save]').onclick = function() {
-    var md = crepe.getMarkdown();
-    var html = crepe.editor.action(getHTML());
-    hiddenInput.value = JSON.stringify({ markdown: md, html: html });
-    if (preview) {
-      var text = md.replace(/[#*_~`>\[\]()!]/g, '').trim();
-      preview.textContent = text.length > 200 ? text.slice(0, 200) + '...' : (text || 'Click to edit');
+    try {
+      var md = crepe.getMarkdown();
+      var html = crepe.editor.action(getHTML());
+      hiddenInput.value = JSON.stringify({ markdown: md, html: html });
+      var snippet = field.querySelector('[data-richtext-snippet]');
+      if (snippet) {
+        var text = md.replace(/[#*_~`>\[\]()!]/g, '').trim();
+        snippet.textContent = text.length > 200 ? text.slice(0, 200) + '...' : (text || 'No content yet');
+      }
+    } catch (err) {
+      console.error('richtext save error:', err);
     }
     close();
   };
@@ -92,6 +97,13 @@ function openEditor(field) {
 function initRichtextEditors() {
   document.querySelectorAll('[data-richtext]:not(.richtext-init)').forEach(function(field) {
     field.classList.add('richtext-init');
+    var preview = field.querySelector('[data-richtext-preview]');
+    if (preview) {
+      preview.addEventListener('click', function(e) {
+        if (e.target.closest('[data-richtext-open]')) return;
+        openEditor(field);
+      });
+    }
     var btn = field.querySelector('[data-richtext-open]');
     if (btn) {
       btn.addEventListener('click', function() {

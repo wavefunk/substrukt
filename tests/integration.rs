@@ -9561,3 +9561,90 @@ async fn media_focal_point_persists_in_metadata() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+const ARRAY_UPLOAD_SCHEMA: &str = r#"{
+    "x-substrukt": {"title": "Albums", "slug": "albums", "storage": "directory"},
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "title": "Album Name"},
+        "photos": {
+            "type": "array",
+            "title": "Photos",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "caption": {"type": "string", "title": "Caption"},
+                    "file": {"type": "string", "title": "Photo", "format": "upload"}
+                }
+            }
+        }
+    },
+    "required": ["name"]
+}"#;
+
+#[tokio::test]
+async fn upload_in_array_saves_correctly() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+    s.create_schema(ARRAY_UPLOAD_SCHEMA).await;
+
+    let csrf = s.get_csrf("/apps/default/content/albums/new").await;
+    let file_part = reqwest::multipart::Part::bytes(b"array upload test".to_vec())
+        .file_name("beach.png")
+        .mime_str("image/png")
+        .unwrap();
+    let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf)
+        .text("name", "Summer Album")
+        .text("photos[0].caption", "Beach day")
+        .part("photos[0].file", file_part);
+    let resp = s
+        .client
+        .post(s.url("/apps/default/content/albums/new"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER, "Entry should save without error");
+
+    // Verify the data via API
+    let token = s.create_api_token("array-upload-test").await;
+    let api = Client::builder().cookie_store(false).build().unwrap();
+    let resp = api
+        .get(s.url("/api/v1/apps/default/content/albums?status=all"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let entries = body.as_array().expect("should be array of entries");
+    assert_eq!(entries.len(), 1);
+
+    let entry = &entries[0];
+    assert_eq!(entry["name"], "Summer Album");
+    let photos = entry["photos"].as_array().expect("photos should be an array");
+    assert_eq!(photos.len(), 1);
+    assert_eq!(photos[0]["caption"], "Beach day");
+    assert!(
+        photos[0]["file"].is_object(),
+        "upload in array item should be an object, got: {}",
+        photos[0]["file"]
+    );
+    assert!(
+        photos[0]["file"]["hash"].is_string(),
+        "upload should have a hash"
+    );
+    assert_eq!(photos[0]["file"]["filename"], "beach.png");
+    assert_eq!(photos[0]["file"]["mime"], "image/png");
+
+    // Verify the file is servable
+    let hash = photos[0]["file"]["hash"].as_str().unwrap();
+    let resp = api
+        .get(s.url(&format!("/api/v1/apps/default/uploads/{hash}")))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

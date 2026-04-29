@@ -766,6 +766,11 @@ fn evaluate_cross_field_rules(
 /// either a string or an object so that stored upload/richtext references pass validation.
 fn patch_upload_types(schema: &Value) -> Value {
     let mut schema = schema.clone();
+    patch_upload_types_recursive(&mut schema);
+    schema
+}
+
+fn patch_upload_types_recursive(schema: &mut Value) {
     if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
         for (_key, prop) in props.iter_mut() {
             let fmt = prop.get("format").and_then(|f| f.as_str());
@@ -776,10 +781,14 @@ fn patch_upload_types(schema: &Value) -> Value {
                     obj.remove("type");
                     obj.insert("type".to_string(), serde_json::json!(["string", "object"]));
                 }
+            } else {
+                patch_upload_types_recursive(prop);
             }
         }
     }
-    schema
+    if let Some(items) = schema.get_mut("items") {
+        patch_upload_types_recursive(items);
+    }
 }
 
 fn generate_entry_id(schema: &SchemaFile, data: &Value) -> String {

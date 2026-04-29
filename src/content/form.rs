@@ -360,15 +360,17 @@ fn render_field(
                     if trimmed.len() > 200 { format!("{}...", &trimmed[..200]) } else { trimmed.to_string() }
                 })
                 .unwrap_or_default();
-            let placeholder = if preview_text.is_empty() { "Click to edit" } else { &preview_text };
+            let snippet = if preview_text.is_empty() { "No content yet" } else { &preview_text };
             let escaped_json = escape_html_attr(&current_json);
             let desc = get_description(schema).map(|d| format!(r#"<p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">{d}</p>"#)).unwrap_or_default();
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;" data-richtext data-richtext-name="{name}" data-richtext-app="{app_slug}">
   <label class="wf-label">{label}{req_star}</label>
   <input type="hidden" name="{name}" value="{escaped_json}">
-  <div data-richtext-preview style="padding: 12px; border: var(--border-1) solid var(--hairline); margin-top: 4px; font-size: 13px; color: var(--fg-muted); cursor: pointer; min-height: 48px;">{placeholder}</div>
-  <button type="button" class="wf-btn primary" style="margin-top: 8px;" data-richtext-open>Open Editor</button>
+  <div data-richtext-preview style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: var(--border-1) solid var(--hairline); margin-top: 4px; font-size: 13px; color: var(--fg-muted); cursor: pointer; min-height: 48px;">
+    <span data-richtext-snippet style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{snippet}</span>
+    <button type="button" class="wf-btn primary" style="flex-shrink: 0;" data-richtext-open>Edit</button>
+  </div>
   {desc}
   <div class="wf-overlay" id="richtext-overlay-{name}"></div>
   <div class="wf-modal wf-modal--lg" id="richtext-modal-{name}">

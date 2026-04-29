@@ -1305,19 +1305,123 @@ async fn process_uploads(
 }
 
 fn set_nested_field(data: &mut serde_json::Value, path: &str, value: serde_json::Value) {
-    if let Some(obj) = data.as_object_mut() {
-        // Handle simple field names (no dots)
-        if !path.contains('.') {
+    let dot_pos = path.find('.');
+    let bracket_pos = path.find('[');
+    let use_bracket = match (dot_pos, bracket_pos) {
+        (_, None) => false,
+        (None, Some(_)) => true,
+        (Some(d), Some(b)) => b < d,
+    };
+
+    if dot_pos.is_none() && bracket_pos.is_none() {
+        if let Some(obj) = data.as_object_mut() {
             obj.insert(path.to_string(), value);
-        } else {
-            let parts: Vec<&str> = path.splitn(2, '.').collect();
-            if parts.len() == 2 {
-                let entry = obj
-                    .entry(parts[0].to_string())
-                    .or_insert(serde_json::Value::Object(Default::default()));
-                set_nested_field(entry, parts[1], value);
+        }
+    } else if use_bracket {
+        let bp = bracket_pos.unwrap();
+        let field_name = &path[..bp];
+        let rest = &path[bp + 1..];
+        if let Some(close) = rest.find(']') {
+            if let Ok(index) = rest[..close].parse::<usize>() {
+                let after = &rest[close + 1..];
+                if let Some(obj) = data.as_object_mut() {
+                    let arr = obj
+                        .entry(field_name.to_string())
+                        .or_insert(serde_json::Value::Array(Vec::new()));
+                    if let Some(arr) = arr.as_array_mut() {
+                        while arr.len() <= index {
+                            arr.push(serde_json::Value::Object(Default::default()));
+                        }
+                        if after.is_empty() {
+                            arr[index] = value;
+                        } else if let Some(remaining) = after.strip_prefix('.') {
+                            set_nested_field(&mut arr[index], remaining, value);
+                        } else {
+                            set_nested_field(&mut arr[index], after, value);
+                        }
+                    }
+                }
             }
         }
+    } else if let Some(obj) = data.as_object_mut() {
+        let parts: Vec<&str> = path.splitn(2, '.').collect();
+        if parts.len() == 2 {
+            let entry = obj
+                .entry(parts[0].to_string())
+                .or_insert(serde_json::Value::Object(Default::default()));
+            set_nested_field(entry, parts[1], value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn set_nested_field_simple() {
+        let mut data = json!({"title": "Hello"});
+        set_nested_field(&mut data, "image", json!({"hash": "abc"}));
+        assert_eq!(data, json!({"title": "Hello", "image": {"hash": "abc"}}));
+    }
+
+    #[test]
+    fn set_nested_field_dotted() {
+        let mut data = json!({"meta": {"title": "Hello"}});
+        set_nested_field(&mut data, "meta.image", json!({"hash": "abc"}));
+        assert_eq!(
+            data,
+            json!({"meta": {"title": "Hello", "image": {"hash": "abc"}}})
+        );
+    }
+
+    #[test]
+    fn set_nested_field_array_bracket() {
+        let mut data = json!({"gallery": [{"title": "Photo 1"}]});
+        set_nested_field(
+            &mut data,
+            "gallery[0].image",
+            json!({"hash": "abc", "filename": "photo.jpg", "mime": "image/jpeg"}),
+        );
+        assert_eq!(
+            data,
+            json!({"gallery": [{"title": "Photo 1", "image": {"hash": "abc", "filename": "photo.jpg", "mime": "image/jpeg"}}]})
+        );
+    }
+
+    #[test]
+    fn set_nested_field_array_creates_entries() {
+        let mut data = json!({});
+        set_nested_field(&mut data, "items[0].file", json!({"hash": "x"}));
+        assert_eq!(data, json!({"items": [{"file": {"hash": "x"}}]}));
+    }
+
+    #[test]
+    fn set_nested_field_array_extends() {
+        let mut data = json!({"items": [{"name": "a"}]});
+        set_nested_field(&mut data, "items[1].file", json!({"hash": "y"}));
+        assert_eq!(
+            data,
+            json!({"items": [{"name": "a"}, {"file": {"hash": "y"}}]})
+        );
+    }
+
+    #[test]
+    fn set_nested_field_dot_then_bracket() {
+        let mut data = json!({"meta": {"gallery": [{"title": "x"}]}});
+        set_nested_field(&mut data, "meta.gallery[0].image", json!({"hash": "z"}));
+        assert_eq!(
+            data,
+            json!({"meta": {"gallery": [{"title": "x", "image": {"hash": "z"}}]}})
+        );
+    }
+
+    #[test]
+    fn set_nested_field_multiple_brackets() {
+        let mut data = json!({"a": [{"b": [{"c": "old"}]}]});
+        set_nested_field(&mut data, "a[0].b[0].c", json!("new"));
+        assert_eq!(data, json!({"a": [{"b": [{"c": "new"}]}]}));
     }
 }
 
