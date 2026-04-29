@@ -30,3 +30,11 @@
 .wf-shell > .wf-main { grid-area: main; }
 .wf-shell > .wf-modeline { grid-area: ml; }
 .wf-shell > .wf-minibuffer { grid-area: mb; }
+
+/* Array fields */
+.array-container {
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+}
+.array-item.wf-framed {
+  display: flex; flex-direction: column; align-items: stretch;
+}
