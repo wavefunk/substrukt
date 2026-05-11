@@ -90,6 +90,12 @@
     .wf-modal-body .milkdown .editor {
       min-height: calc(100vh - 200px);
     }
+    .milkdown .ProseMirror img,
+    .milkdown .ProseMirror .image-block {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
   </style>
   <script>
     (function() {
@@ -110,10 +116,6 @@
     })();
   </script>
   <script src="/static/vendor/easymde.min.js"></script>
-  {% if has_richtext is defined and has_richtext %}
-  <link rel="stylesheet" href="/static/css/milkdown-theme.css">
-  <script src="/static/js/milkdown-editor.bundle.js"></script>
-  {% endif %}
   <script src="/static/vendor/htmx.min.js"></script>
 </head>
 <body hx-boost="true" hx-target="#main-content" hx-swap="innerHTML">
@@ -122,6 +124,10 @@
       {% include "_nav.html" %}
     </aside>
     <main class="wf-main wf-scroll" id="main-content">
+      {% if has_richtext is defined and has_richtext %}
+      <link rel="stylesheet" href="/static/css/milkdown-theme.css">
+      <script src="/static/js/milkdown-editor.bundle.js"></script>
+      {% endif %}
       {% if flash_kind %}
       <div class="wf-alert wf-mb-4 {% if flash_kind == 'success' %}ok{% elif flash_kind == 'error' %}err{% else %}info{% endif %}">
         <div class="wf-alert-bar"></div>
