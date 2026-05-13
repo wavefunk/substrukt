@@ -751,6 +751,14 @@ impl AuditLogger {
         Ok(rows.into_iter().map(|(actor,)| actor).collect())
     }
 
+    pub async fn list_audit_actions(&self) -> eyre::Result<Vec<String>> {
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT DISTINCT action FROM audit_log ORDER BY action")
+                .fetch_all(self.pool.as_ref())
+                .await?;
+        Ok(rows.into_iter().map(|(action,)| action).collect())
+    }
+
     pub fn log(
         &self,
         actor: &str,
@@ -1724,6 +1732,28 @@ mod tests {
 
         let actors = logger.list_audit_actors().await.unwrap();
         assert_eq!(actors, vec!["alice", "zara"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_audit_actions() {
+        let pool = test_pool().await;
+        let logger = AuditLogger::new(pool);
+
+        logger
+            .execute_raw("INSERT INTO audit_log (timestamp, actor, action, resource_type, resource_id) VALUES ('2026-01-01T00:00:00Z', 'zara', 'deployment_fired', 'deployment', 'production')")
+            .await
+            .unwrap();
+        logger
+            .execute_raw("INSERT INTO audit_log (timestamp, actor, action, resource_type, resource_id) VALUES ('2026-01-02T00:00:00Z', 'alice', 'content_create', 'content', 'posts/1')")
+            .await
+            .unwrap();
+        logger
+            .execute_raw("INSERT INTO audit_log (timestamp, actor, action, resource_type, resource_id) VALUES ('2026-01-03T00:00:00Z', 'alice', 'deployment_fired', 'deployment', 'production')")
+            .await
+            .unwrap();
+
+        let actions = logger.list_audit_actions().await.unwrap();
+        assert_eq!(actions, vec!["content_create", "deployment_fired"]);
     }
 
     // ── Backup config & history tests ───────────────────────────

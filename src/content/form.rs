@@ -240,7 +240,18 @@ pub fn render_form_fields(
     ref_options: &ReferenceOptions,
     app_slug: &str,
 ) -> String {
-    render_form_fields_inner(schema, data, prefix, ref_options, app_slug, 0, 0)
+    render_form_fields_inner(schema, data, prefix, ref_options, app_slug, 0, 0, false)
+}
+
+/// Generate read-only HTML form fields from a JSON Schema.
+pub fn render_form_fields_readonly(
+    schema: &Value,
+    data: Option<&Value>,
+    prefix: &str,
+    ref_options: &ReferenceOptions,
+    app_slug: &str,
+) -> String {
+    render_form_fields_inner(schema, data, prefix, ref_options, app_slug, 0, 0, true)
 }
 
 fn render_form_fields_inner(
@@ -251,6 +262,7 @@ fn render_form_fields_inner(
     app_slug: &str,
     depth: usize,
     array_depth: usize,
+    read_only: bool,
 ) -> String {
     if depth > MAX_NESTING_DEPTH {
         return r#"<div class="wf-field" style="color: var(--err); font-size: 13px;">Error: maximum nesting depth exceeded</div>"#.to_string();
@@ -309,6 +321,7 @@ fn render_form_fields_inner(
             app_slug,
             depth,
             array_depth,
+            read_only,
         ));
     }
 
@@ -327,6 +340,7 @@ fn render_field(
     app_slug: &str,
     depth: usize,
     array_depth: usize,
+    read_only: bool,
 ) -> String {
     let req_attr = if required { " required" } else { "" };
     let req_star = if required { " *" } else { "" };
@@ -335,16 +349,19 @@ fn render_field(
     } else {
         ""
     };
+    let readonly_attr = if read_only { " readonly" } else { "" };
+    let disabled_attr = if read_only { " disabled" } else { "" };
 
     match (field_type, format) {
         ("string", Some("markdown")) => {
             let val = escape_html_attr(value.and_then(|v| v.as_str()).unwrap_or(""));
             let (constraint_attrs, hints) = string_constraints(schema, true);
             let hint_html = build_hint_line(&hints);
+            let markdown_attr = if read_only { "" } else { " data-markdown" };
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <textarea id="{name}" name="{name}" rows="12" data-markdown class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}>{val}</textarea>
+  <textarea id="{name}" name="{name}" rows="12"{markdown_attr} class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}{readonly_attr}>{val}</textarea>
 {req_msg}{hint_html}</div>
 "#
             )
@@ -382,16 +399,16 @@ fn render_field(
             };
             let escaped_json = escape_html_attr(&current_json);
             let desc = get_description(schema).map(|d| format!(r#"<p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">{d}</p>"#)).unwrap_or_default();
-            format!(
-                r#"<div class="wf-field" style="margin-top: 16px;" data-richtext data-richtext-name="{name}" data-richtext-app="{app_slug}">
-  <label class="wf-label">{label}{req_star}</label>
-  <input type="hidden" name="{name}" value="{escaped_json}">
-  <div data-richtext-preview style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: var(--border-1) solid var(--hairline); margin-top: 4px; font-size: 13px; color: var(--fg-muted); cursor: pointer; min-height: 48px;">
-    <span data-richtext-snippet style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{snippet}</span>
-    <button type="button" class="wf-btn primary" style="flex-shrink: 0;" data-richtext-open>Edit</button>
-  </div>
-  {desc}
-  <div class="wf-overlay" id="richtext-overlay-{name}"></div>
+            let open_button = if read_only {
+                String::new()
+            } else {
+                r#"<button type="button" class="wf-btn primary" style="flex-shrink: 0;" data-richtext-open>Edit</button>"#.to_string()
+            };
+            let modal_html = if read_only {
+                String::new()
+            } else {
+                format!(
+                    r#"<div class="wf-overlay" id="richtext-overlay-{name}"></div>
   <div class="wf-modal wf-modal--lg" id="richtext-modal-{name}">
     <div class="wf-modal-head">
       <span class="wf-modal-title">EDIT: {label}</span>
@@ -401,7 +418,20 @@ fn render_field(
       </div>
     </div>
     <div class="wf-modal-body" data-richtext-root style="padding: 0; flex: 1; overflow: auto;"></div>
+  </div>"#
+                )
+            };
+            let preview_cursor = if read_only { "default" } else { "pointer" };
+            format!(
+                r#"<div class="wf-field" style="margin-top: 16px;" data-richtext data-richtext-name="{name}" data-richtext-app="{app_slug}">
+  <label class="wf-label">{label}{req_star}</label>
+  <input type="hidden" name="{name}" value="{escaped_json}">
+  <div data-richtext-preview style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: var(--border-1) solid var(--hairline); margin-top: 4px; font-size: 13px; color: var(--fg-muted); cursor: {preview_cursor}; min-height: 48px;">
+    <span data-richtext-snippet style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{snippet}</span>
+    {open_button}
   </div>
+  {desc}
+  {modal_html}
 {req_msg}</div>
 "#
             )
@@ -413,7 +443,7 @@ fn render_field(
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <textarea id="{name}" name="{name}" rows="6" class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}>{val}</textarea>
+  <textarea id="{name}" name="{name}" rows="6" class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}{readonly_attr}>{val}</textarea>
 {req_msg}{hint_html}</div>
 "#
             )
@@ -454,6 +484,20 @@ fn render_field(
 
             let hint_html =
                 build_hint_line(&get_description(schema).into_iter().collect::<Vec<_>>());
+            if read_only {
+                let readonly_current = if current_html.is_empty() {
+                    r#"<div style="color: var(--fg-muted); font-size: 13px; margin-top: 4px;">No file uploaded</div>"#.to_string()
+                } else {
+                    current_html
+                };
+                return format!(
+                    r#"<div class="wf-field" style="margin-top: 16px;">
+  <label class="wf-label">{label}{req_star}</label>
+  {readonly_current}
+{hint_html}</div>
+"#
+                );
+            }
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
@@ -492,7 +536,7 @@ fn render_field(
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <select id="{name}" name="{name}" class="wf-select" style="width: 100%; margin-top: 4px;"{req_attr}>
+  <select id="{name}" name="{name}" class="wf-select" style="width: 100%; margin-top: 4px;"{req_attr}{disabled_attr}>
     {opts_html}
   </select>
 {req_msg}{hint_html}</div>
@@ -517,7 +561,7 @@ fn render_field(
                 format!(
                     r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <select id="{name}" name="{name}" class="wf-select" style="width: 100%; margin-top: 4px;"{req_attr}>
+  <select id="{name}" name="{name}" class="wf-select" style="width: 100%; margin-top: 4px;"{req_attr}{disabled_attr}>
     {options}
   </select>
 {req_msg}{hint_html}</div>
@@ -531,7 +575,7 @@ fn render_field(
                 format!(
                     r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <textarea id="{name}" name="{name}" rows="6" class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}>{val}</textarea>
+  <textarea id="{name}" name="{name}" rows="6" class="wf-textarea" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}{readonly_attr}>{val}</textarea>
 {req_msg}{hint_html}</div>
 "#
                 )
@@ -542,7 +586,7 @@ fn render_field(
                 format!(
                     r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <input type="text" id="{name}" name="{name}" value="{val}" class="wf-input" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}>
+  <input type="text" id="{name}" name="{name}" value="{val}" class="wf-input" style="width: 100%; margin-top: 4px;"{constraint_attrs}{req_attr}{readonly_attr}>
 {req_msg}{hint_html}</div>
 "#
                 )
@@ -569,7 +613,7 @@ fn render_field(
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <input type="number" id="{name}" name="{name}" value="{val}"{step}{constraint_attrs} class="wf-input" style="width: 100%; margin-top: 4px;"{req_attr}>
+  <input type="number" id="{name}" name="{name}" value="{val}"{step}{constraint_attrs} class="wf-input" style="width: 100%; margin-top: 4px;"{req_attr}{readonly_attr}>
 {req_msg}{hint_html}</div>
 "#
             )
@@ -583,7 +627,7 @@ fn render_field(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-check-row">
     <input type="hidden" name="{name}" value="false">
-    <input type="checkbox" id="{name}" name="{name}" value="true" class="wf-check"{checked_attr}>
+    <input type="checkbox" id="{name}" name="{name}" value="true" class="wf-check"{checked_attr}{disabled_attr}>
     <span>{label}</span>
   </label>
 {hint_html}</div>
@@ -599,6 +643,7 @@ fn render_field(
                 app_slug,
                 depth + 1,
                 array_depth,
+                read_only,
             );
             format!(
                 r#"<fieldset style="border-top: 1px solid var(--hairline-dim); padding-top: 16px; margin-top: 16px;">
@@ -638,6 +683,7 @@ fn render_field(
                             app_slug,
                             depth + 1,
                             array_depth,
+                            read_only,
                         )
                     } else {
                         let item_type = items_schema
@@ -661,13 +707,19 @@ fn render_field(
                             app_slug,
                             depth + 1,
                             array_depth,
+                            read_only,
                         )
+                    };
+                    let remove_button = if read_only {
+                        String::new()
+                    } else {
+                        r#"<button type="button" onclick="this.closest('.array-item').remove()" style="color: var(--err); background: none; border: none; cursor: pointer; flex-shrink: 0;">Remove</button>"#.to_string()
                     };
                     items_html.push_str(&format!(
                         r#"<div class="array-item wf-framed" data-index="{i}">
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
     {preview_html}
-    <button type="button" onclick="this.closest('.array-item').remove()" style="color: var(--err); background: none; border: none; cursor: pointer; flex-shrink: 0;">Remove</button>
+    {remove_button}
   </div>
   {item_html}
 </div>"#,
@@ -686,6 +738,7 @@ fn render_field(
                     app_slug,
                     depth + 1,
                     array_depth + 1,
+                    read_only,
                 )
             } else {
                 let item_type = items_schema
@@ -709,6 +762,7 @@ fn render_field(
                     app_slug,
                     depth + 1,
                     array_depth + 1,
+                    read_only,
                 )
             };
 
@@ -728,14 +782,22 @@ fn render_field(
             }
             let hint_html = build_hint_line(&hints);
 
+            let template_and_button = if read_only {
+                String::new()
+            } else {
+                format!(
+                    r#"<template id="template-{name}">{template_html}</template>
+  <button type="button" onclick="addArrayItem('{name}', {array_depth})" class="wf-btn ghost sm" style="margin-top: 8px;">+ Add Item</button>"#
+                )
+            };
+
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label class="wf-label">{label}</label>
   <div id="array-{name}" class="array-container">
     {items_html}
   </div>
-  <template id="template-{name}">{template_html}</template>
-  <button type="button" onclick="addArrayItem('{name}', {array_depth})" class="wf-btn ghost sm" style="margin-top: 8px;">+ Add Item</button>
+  {template_and_button}
 {hint_html}</div>
 "#
             )
@@ -745,7 +807,7 @@ fn render_field(
             format!(
                 r#"<div class="wf-field" style="margin-top: 16px;">
   <label for="{name}" class="wf-label">{label}{req_star}</label>
-  <input type="text" id="{name}" name="{name}" value="{val}" class="wf-input" style="width: 100%; margin-top: 4px;"{req_attr}>
+  <input type="text" id="{name}" name="{name}" value="{val}" class="wf-input" style="width: 100%; margin-top: 4px;"{req_attr}{readonly_attr}>
 {req_msg}</div>
 "#
             )
@@ -1159,6 +1221,55 @@ mod tests {
         assert!(
             !html.contains("color: var(--fg-muted); font-size: 12px;"),
             "should not have hint line"
+        );
+    }
+
+    #[test]
+    fn readonly_fields_disable_mutating_controls() {
+        let schema = json!({
+            "properties": {
+                "title": {"type": "string", "title": "Title"},
+                "body": {"type": "string", "format": "markdown", "title": "Body"},
+                "published": {"type": "boolean", "title": "Published"},
+                "status": {"type": "string", "title": "Status", "enum": ["draft", "published"]},
+                "tags": {"type": "array", "title": "Tags", "items": {"type": "string"}}
+            }
+        });
+        let data = json!({
+            "title": "Hello",
+            "body": "Markdown",
+            "published": true,
+            "status": "draft",
+            "tags": ["one"]
+        });
+        let html = render_form_fields_readonly(
+            &schema,
+            Some(&data),
+            "",
+            &ReferenceOptions::new(),
+            "test-app",
+        );
+
+        assert!(html.contains(
+            r#"value="Hello" class="wf-input" style="width: 100%; margin-top: 4px;" readonly"#
+        ));
+        assert!(html.contains(r#"<textarea id="body" name="body" rows="12" class="wf-textarea""#));
+        assert!(html.contains(r#"readonly>Markdown</textarea>"#));
+        assert!(
+            !html.contains("data-markdown"),
+            "readonly markdown should not initialize the editor toolbar"
+        );
+        assert!(html.contains(r#"class="wf-check" checked disabled"#));
+        assert!(
+            html.contains(r#"class="wf-select" style="width: 100%; margin-top: 4px;" disabled"#)
+        );
+        assert!(
+            !html.contains("+ Add Item"),
+            "readonly arrays should not show add controls"
+        );
+        assert!(
+            !html.contains("Remove</button>"),
+            "readonly arrays should not show remove controls"
         );
     }
 

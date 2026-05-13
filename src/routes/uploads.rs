@@ -19,6 +19,7 @@ use crate::uploads;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_uploads).post(upload_file))
+        .route("/file/{hash}/{filename}/download", get(download_upload))
         .route("/file/{hash}/{filename}", get(serve_upload))
         .route("/file/{hash}", get(serve_upload_no_name))
         .route("/{hash}", axum::routing::delete(delete_upload))
@@ -330,7 +331,15 @@ async fn serve_upload(
     app: AppContext,
     Path((_app_slug, hash, _filename)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    serve_file(&state, &app, &hash).await
+    serve_file(&state, &app, &hash, ContentDisposition::Inline).await
+}
+
+async fn download_upload(
+    State(state): State<AppState>,
+    app: AppContext,
+    Path((_app_slug, hash, _filename)): Path<(String, String, String)>,
+) -> impl IntoResponse {
+    serve_file(&state, &app, &hash, ContentDisposition::Attachment).await
 }
 
 async fn serve_upload_no_name(
@@ -338,7 +347,13 @@ async fn serve_upload_no_name(
     app: AppContext,
     Path((_app_slug, hash)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    serve_file(&state, &app, &hash).await
+    serve_file(&state, &app, &hash, ContentDisposition::Inline).await
+}
+
+#[derive(Clone, Copy)]
+pub enum ContentDisposition {
+    Inline,
+    Attachment,
 }
 
 pub async fn serve_upload_by_hash(
@@ -347,6 +362,25 @@ pub async fn serve_upload_by_hash(
     uploads_dir: &std::path::Path,
     hash: &str,
     request_headers: &HeaderMap,
+) -> axum::response::Response {
+    serve_upload_by_hash_with_disposition(
+        state,
+        app_id,
+        uploads_dir,
+        hash,
+        request_headers,
+        ContentDisposition::Inline,
+    )
+    .await
+}
+
+pub async fn serve_upload_by_hash_with_disposition(
+    state: &AppState,
+    app_id: i64,
+    uploads_dir: &std::path::Path,
+    hash: &str,
+    request_headers: &HeaderMap,
+    disposition: ContentDisposition,
 ) -> axum::response::Response {
     let path = match uploads::get_upload_path(uploads_dir, hash) {
         Some(p) => p,
@@ -380,8 +414,9 @@ pub async fn serve_upload_by_hash(
                 .headers_mut()
                 .insert(header::ETAG, HeaderValue::from_str(&etag).unwrap());
             if let Some(meta) = &meta {
-                let disposition = format!("inline; filename=\"{}\"", meta.filename);
-                if let Ok(val) = HeaderValue::from_str(&disposition) {
+                if let Ok(val) =
+                    HeaderValue::from_str(&content_disposition_header(disposition, &meta.filename))
+                {
                     response
                         .headers_mut()
                         .insert(header::CONTENT_DISPOSITION, val);
@@ -393,9 +428,30 @@ pub async fn serve_upload_by_hash(
     }
 }
 
-async fn serve_file(state: &AppState, app: &AppContext, hash: &str) -> axum::response::Response {
+fn content_disposition_header(disposition: ContentDisposition, filename: &str) -> String {
+    let disposition = match disposition {
+        ContentDisposition::Inline => "inline",
+        ContentDisposition::Attachment => "attachment",
+    };
+    format!("{disposition}; filename=\"{filename}\"")
+}
+
+async fn serve_file(
+    state: &AppState,
+    app: &AppContext,
+    hash: &str,
+    disposition: ContentDisposition,
+) -> axum::response::Response {
     let uploads_dir = state.config.app_uploads_dir(&app.app.slug);
-    serve_upload_by_hash(state, app.app.id, &uploads_dir, hash, &HeaderMap::new()).await
+    serve_upload_by_hash_with_disposition(
+        state,
+        app.app.id,
+        &uploads_dir,
+        hash,
+        &HeaderMap::new(),
+        disposition,
+    )
+    .await
 }
 
 async fn delete_upload(

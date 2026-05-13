@@ -10,6 +10,7 @@ pub mod uploads;
 use axum::{
     Router,
     extract::{OriginalUri, Request, State},
+    http::StatusCode,
     middleware,
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
@@ -124,6 +125,29 @@ async fn not_found(
 
 pub fn render_error(state: &AppState, status: u16, message: &str, is_htmx: bool) -> String {
     render_error_with_nav(state, status, message, is_htmx, "", "", "", "")
+}
+
+pub fn error_response_with_nav(
+    state: &AppState,
+    status: StatusCode,
+    message: &str,
+    is_htmx: bool,
+    user_role: &str,
+    current_username: &str,
+    csrf_token: &str,
+    ath_csrf: &str,
+) -> Response {
+    let html = render_error_with_nav(
+        state,
+        status.as_u16(),
+        message,
+        is_htmx,
+        user_role,
+        current_username,
+        csrf_token,
+        ath_csrf,
+    );
+    (status, Html(html)).into_response()
 }
 
 pub fn render_error_with_nav(

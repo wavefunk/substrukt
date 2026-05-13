@@ -7,25 +7,9 @@
   <div class="wf-filterbar">
     <select onchange="applyFilters()" id="filter-action" class="wf-select sm">
       <option value="">All Actions</option>
-      <option value="content_create" {% if filter_action == "content_create" %}selected{% endif %}>content_create</option>
-      <option value="content_update" {% if filter_action == "content_update" %}selected{% endif %}>content_update</option>
-      <option value="content_delete" {% if filter_action == "content_delete" %}selected{% endif %}>content_delete</option>
-      <option value="schema_create" {% if filter_action == "schema_create" %}selected{% endif %}>schema_create</option>
-      <option value="schema_update" {% if filter_action == "schema_update" %}selected{% endif %}>schema_update</option>
-      <option value="schema_delete" {% if filter_action == "schema_delete" %}selected{% endif %}>schema_delete</option>
-      <option value="login" {% if filter_action == "login" %}selected{% endif %}>login</option>
-      <option value="logout" {% if filter_action == "logout" %}selected{% endif %}>logout</option>
-      <option value="user_create" {% if filter_action == "user_create" %}selected{% endif %}>user_create</option>
-      <option value="token_create" {% if filter_action == "token_create" %}selected{% endif %}>token_create</option>
-      <option value="token_delete" {% if filter_action == "token_delete" %}selected{% endif %}>token_delete</option>
-      <option value="invite_create" {% if filter_action == "invite_create" %}selected{% endif %}>invite_create</option>
-      <option value="invite_delete" {% if filter_action == "invite_delete" %}selected{% endif %}>invite_delete</option>
-      <option value="import" {% if filter_action == "import" %}selected{% endif %}>import</option>
-      <option value="export" {% if filter_action == "export" %}selected{% endif %}>export</option>
-      <option value="app_create" {% if filter_action == "app_create" %}selected{% endif %}>app_create</option>
-      <option value="app_delete" {% if filter_action == "app_delete" %}selected{% endif %}>app_delete</option>
-      <option value="deployment_create" {% if filter_action == "deployment_create" %}selected{% endif %}>deployment_create</option>
-      <option value="deployment_delete" {% if filter_action == "deployment_delete" %}selected{% endif %}>deployment_delete</option>
+      {% for action in actions %}
+      <option value="{{ action }}" {% if filter_action == action %}selected{% endif %}>{{ action }}</option>
+      {% endfor %}
     </select>
     <select onchange="applyFilters()" id="filter-actor" class="wf-select sm">
       <option value="">All Actors</option>

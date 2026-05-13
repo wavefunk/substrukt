@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use axum::{
     Extension, Form, Router,
     extract::State,
-    http::{HeaderMap, HeaderName, HeaderValue},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
@@ -12,6 +12,7 @@ use tower_sessions::Session;
 
 use crate::auth;
 use crate::backup;
+use crate::routes::error_response_with_nav;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
 
@@ -61,11 +62,18 @@ async fn users_page(
     session: Session,
 ) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
-        return Err((
-            axum::http::StatusCode::FORBIDDEN,
+        let csrf_token = auth::ensure_csrf_token(&session).await;
+        let ath_csrf = auth::ath_csrf(&session).await;
+        return Ok(error_response_with_nav(
+            &state,
+            StatusCode::FORBIDDEN,
             "Insufficient permissions",
-        )
-            .into());
+            is_htmx,
+            &role.0,
+            &username_str(&user),
+            &csrf_token,
+            &ath_csrf,
+        ));
     }
 
     let invitations = state
@@ -730,6 +738,11 @@ async fn audit_log_page(
         .list_audit_actors()
         .await
         .map_err(|e| format!("DB error: {e}"))?;
+    let actions = state
+        .audit
+        .list_audit_actions()
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
 
     // Build a map from user ID (string) -> username for display
     let all_users = state.ath.db().list_users().await.unwrap_or_default();
@@ -817,6 +830,7 @@ async fn audit_log_page(
             user_role => user_role,
             current_username => current_username,
             entries => entry_data,
+            actions => actions,
             actors => actor_options,
             filter_action => filter.action,
             filter_actor => filter.actor,

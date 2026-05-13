@@ -1,6 +1,6 @@
 use axum::{
     Extension, Form, Router,
-    extract::State,
+    extract::{RawForm, State},
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
@@ -339,19 +339,13 @@ async fn update_app_name(
     Ok(Redirect::to(&format!("/apps/{}/settings", app.app.slug)).into_response())
 }
 
-#[derive(serde::Deserialize)]
-struct AccessForm {
-    #[serde(default)]
-    access: Vec<String>,
-}
-
 async fn update_access(
     Extension(user): Extension<allowthem_core::User>,
     Extension(role): Extension<auth::CurrentUserRole>,
     State(state): State<AppState>,
     session: Session,
     app: AppContext,
-    Form(form): Form<AccessForm>,
+    RawForm(raw_form): RawForm,
 ) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
         return Err((
@@ -364,7 +358,7 @@ async fn update_access(
 
     // Get all users from allowthem and check/update access
     let all_users = state.ath.db().list_users().await.unwrap_or_default();
-    let granted_ids: std::collections::HashSet<String> = form.access.into_iter().collect();
+    let granted_ids = parse_access_grants(&raw_form);
 
     for u in &all_users {
         let uid_str = u.id.to_string();
@@ -407,6 +401,12 @@ async fn update_access(
 
     auth::set_flash(&session, "success", "Access updated").await;
     Ok(Redirect::to(&format!("/apps/{}/settings", app.app.slug)).into_response())
+}
+
+fn parse_access_grants(form: &[u8]) -> std::collections::HashSet<String> {
+    url::form_urlencoded::parse(form)
+        .filter_map(|(key, value)| (key == "access").then(|| value.into_owned()))
+        .collect()
 }
 
 #[derive(serde::Deserialize)]
@@ -789,4 +789,23 @@ async fn delete_app(
     )
     .await;
     Ok(Redirect::to("/apps").into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_access_grants;
+
+    #[test]
+    fn parses_zero_one_and_many_access_grants() {
+        assert!(parse_access_grants(b"_csrf=token").is_empty());
+
+        let one = parse_access_grants(b"_csrf=token&access=user-1");
+        assert_eq!(one.len(), 1);
+        assert!(one.contains("user-1"));
+
+        let many = parse_access_grants(b"access=user-1&_csrf=token&access=user-2");
+        assert_eq!(many.len(), 2);
+        assert!(many.contains("user-1"));
+        assert!(many.contains("user-2"));
+    }
 }

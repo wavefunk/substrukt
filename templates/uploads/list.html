@@ -48,8 +48,8 @@
             {% endif %}
           </td>
           <td class="wf-text-right">
-            <a class="wf-btn sm" href="/apps/{{ app.slug }}/uploads/file/{{ upload.hash }}/{{ upload.filename }}" target="_blank">View</a>
-            <a class="wf-btn sm" href="/apps/{{ app.slug }}/uploads/file/{{ upload.hash }}/{{ upload.filename }}" download>Download</a>
+            <a class="wf-btn sm" href="/apps/{{ app.slug }}/uploads/file/{{ upload.hash }}/{{ upload.filename }}" target="_blank" hx-boost="false">View</a>
+            <a class="wf-btn sm" href="/apps/{{ app.slug }}/uploads/file/{{ upload.hash }}/{{ upload.filename }}/download" hx-boost="false">Download</a>
           </td>
         </tr>
         {% endfor %}

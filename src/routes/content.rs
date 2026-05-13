@@ -1,6 +1,7 @@
 use axum::{
     Extension, Router,
     extract::{Multipart, Path, Query, State},
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
@@ -11,6 +12,7 @@ use crate::app_context::AppContext;
 use crate::auth;
 use crate::content::form::ReferenceOptions;
 use crate::content::{self, form as content_form};
+use crate::routes::error_response_with_nav;
 use crate::schema;
 use crate::schema::models::Kind;
 use crate::state::{AppState, ContentCache};
@@ -74,6 +76,28 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
+fn content_error_response(
+    state: &AppState,
+    status: StatusCode,
+    message: &str,
+    is_htmx: bool,
+    role: &auth::CurrentUserRole,
+    current_username: &str,
+    csrf_token: &str,
+    ath_csrf: &str,
+) -> axum::response::Response {
+    error_response_with_nav(
+        state,
+        status,
+        message,
+        is_htmx,
+        &role.0,
+        current_username,
+        csrf_token,
+        ath_csrf,
+    )
+}
+
 /// Extract username string from allowthem User.
 fn username_str(user: &allowthem_core::User) -> String {
     user.username
@@ -94,11 +118,23 @@ async fn list_entries(
 ) -> axum::response::Result<axum::response::Response> {
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let ath_csrf = auth::ath_csrf(&session).await;
+    let current_username = username_str(&user);
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
     let content_dir = state.config.app_content_dir(&app.app.slug);
-    let schema_file = schema::get_schema(&schemas_dir, &schema_slug)
-        .map_err(|e| format!("Error: {e}"))?
-        .ok_or("Schema not found")?;
+    let Some(schema_file) =
+        schema::get_schema(&schemas_dir, &schema_slug).map_err(|e| format!("Error: {e}"))?
+    else {
+        return Ok(content_error_response(
+            &state,
+            StatusCode::NOT_FOUND,
+            "Schema not found",
+            is_htmx,
+            &role,
+            &current_username,
+            &csrf_token,
+            &ath_csrf,
+        ));
+    };
 
     if schema_file.meta.kind == Kind::Single {
         return Ok(Redirect::to(&format!(
@@ -192,7 +228,6 @@ async fn list_entries(
     let column_keys: Vec<&str> = columns.iter().map(|(key, _)| key.as_str()).collect();
 
     let user_role = &role.0;
-    let current_username = username_str(&user);
     let flash = auth::take_flash(&session).await;
     let echo = auth::flash_echo_trigger(&flash);
     let tmpl = state
@@ -596,15 +631,24 @@ async fn edit_entry_page(
         .and_then(|d| extract_entry_title(d, &schema_file.schema));
 
     let ref_options = build_reference_options(&schema_file.schema, &state.cache, "", &app.app.slug);
-    let form_html = content_form::render_form_fields(
-        &schema_file.schema,
-        existing_data.as_ref(),
-        "",
-        &ref_options,
-        &app.app.slug,
-    );
-
     let user_role = &role.0;
+    let form_html = if user_role == "viewer" {
+        content_form::render_form_fields_readonly(
+            &schema_file.schema,
+            existing_data.as_ref(),
+            "",
+            &ref_options,
+            &app.app.slug,
+        )
+    } else {
+        content_form::render_form_fields(
+            &schema_file.schema,
+            existing_data.as_ref(),
+            "",
+            &ref_options,
+            &app.app.slug,
+        )
+    };
     let current_username = username_str(&user);
     let tmpl = state
         .templates

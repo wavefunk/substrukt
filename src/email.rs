@@ -207,6 +207,7 @@ pub fn build_sender(smtp: Option<SmtpConfig>) -> eyre::Result<Arc<dyn EmailSende
 #[cfg(test)]
 mod tests {
     use super::*;
+    use allowthem_core::EmailTemplate;
 
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -300,12 +301,15 @@ mod tests {
     #[test]
     fn log_sender_is_the_fallback() {
         let sender = build_sender(None).unwrap();
-        let fut = sender.send(EmailMessage {
-            to: "a@b.com",
-            subject: "hi",
-            body: "hi",
-            html: None,
-        });
+        let message = EmailMessage {
+            to: "a@b.com".to_string(),
+            subject: "hi".to_string(),
+            template: EmailTemplate::PasswordReset {
+                url: "https://example.com/reset".to_string(),
+                username: "test-user".to_string(),
+            },
+        };
+        let fut = sender.send(&message);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()

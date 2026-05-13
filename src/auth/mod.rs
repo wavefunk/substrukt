@@ -6,6 +6,7 @@ use axum::{
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
 };
+use std::sync::atomic::Ordering;
 use tower_sessions::Session;
 
 use crate::state::AppState;
@@ -281,15 +282,26 @@ pub async fn require_auth(
         return next.run(request).await;
     }
 
-    if !state.has_users.load(std::sync::atomic::Ordering::Relaxed) {
-        if state.config.registrations_enabled {
-            return htmx_aware_redirect(&request, "/register");
+    if !state.has_users.load(Ordering::Relaxed) {
+        let users_exist = state
+            .ath
+            .db()
+            .list_users()
+            .await
+            .map(|users| !users.is_empty())
+            .unwrap_or(false);
+        if users_exist {
+            state.has_users.store(true, Ordering::Relaxed);
+        } else {
+            if state.config.registrations_enabled {
+                return htmx_aware_redirect(&request, "/register");
+            }
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Html("No admin user configured. Run `substrukt create-admin` from the server CLI."),
+            )
+                .into_response();
         }
-        return (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            Html("No admin user configured. Run `substrukt create-admin` from the server CLI."),
-        )
-            .into_response();
     }
 
     // Parse allowthem session cookie

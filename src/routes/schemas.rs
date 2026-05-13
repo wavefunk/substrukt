@@ -1,6 +1,7 @@
 use axum::{
     Extension, Form, Router,
     extract::{Path, State},
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
@@ -9,6 +10,7 @@ use tower_sessions::Session;
 
 use crate::app_context::AppContext;
 use crate::auth;
+use crate::routes::error_response_with_nav;
 use crate::schema;
 use crate::state::AppState;
 use crate::templates::base_for_htmx;
@@ -272,13 +274,25 @@ async fn edit_schema_page(
     session: Session,
     app: AppContext,
     Path((_app_slug, slug)): Path<(String, String)>,
-) -> axum::response::Result<impl IntoResponse> {
+) -> axum::response::Result<axum::response::Response> {
     if !auth::has_min_role(&role.0, "admin") {
-        return Err((
-            axum::http::StatusCode::FORBIDDEN,
+        let csrf_token = auth::ensure_csrf_token(&session).await;
+        let ath_csrf = auth::ath_csrf(&session).await;
+        let current_username = user
+            .username
+            .as_ref()
+            .map(|u| u.as_str().to_string())
+            .unwrap_or_default();
+        return Ok(error_response_with_nav(
+            &state,
+            StatusCode::FORBIDDEN,
             "Insufficient permissions",
-        )
-            .into());
+            is_htmx,
+            &role.0,
+            &current_username,
+            &csrf_token,
+            &ath_csrf,
+        ));
     }
     let csrf_token = auth::ensure_csrf_token(&session).await;
     let ath_csrf = auth::ath_csrf(&session).await;
@@ -289,9 +303,20 @@ async fn edit_schema_page(
         .map(|u| u.as_str().to_string())
         .unwrap_or_default();
     let schemas_dir = state.config.app_schemas_dir(&app.app.slug);
-    let schema = schema::get_schema(&schemas_dir, &slug)
-        .map_err(|e| format!("Error: {e}"))?
-        .ok_or("Schema not found")?;
+    let Some(schema) =
+        schema::get_schema(&schemas_dir, &slug).map_err(|e| format!("Error: {e}"))?
+    else {
+        return Ok(error_response_with_nav(
+            &state,
+            StatusCode::NOT_FOUND,
+            "Schema not found",
+            is_htmx,
+            user_role,
+            &current_username,
+            &csrf_token,
+            &ath_csrf,
+        ));
+    };
 
     let tmpl = state
         .templates
@@ -314,7 +339,7 @@ async fn edit_schema_page(
             schema_json => serde_json::to_string_pretty(&schema.schema).unwrap_or_default(),
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html))
+    Ok(Html(html).into_response())
 }
 
 async fn update_schema(
