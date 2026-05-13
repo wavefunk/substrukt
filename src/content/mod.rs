@@ -896,7 +896,13 @@ pub fn project_richtext_fields(data: &mut Value, schema: &Value, raw: bool, app_
     project_richtext_fields_inner(data, schema, raw, app_slug, 0);
 }
 
-fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, app_slug: &str, depth: usize) {
+fn project_richtext_fields_inner(
+    data: &mut Value,
+    schema: &Value,
+    raw: bool,
+    app_slug: &str,
+    depth: usize,
+) {
     if depth > MAX_NESTING_DEPTH {
         return;
     }
@@ -920,7 +926,10 @@ fn project_richtext_fields_inner(data: &mut Value, schema: &Value, raw: bool, ap
                 if let Some(val) = projected {
                     if !raw {
                         if let Some(html) = val.as_str() {
-                            obj.insert(key.clone(), Value::String(resolve_upload_uris_for_api(html, app_slug)));
+                            obj.insert(
+                                key.clone(),
+                                Value::String(resolve_upload_uris_for_api(html, app_slug)),
+                            );
                         } else {
                             obj.insert(key.clone(), val);
                         }
@@ -2869,7 +2878,10 @@ mod tests {
     fn resolve_upload_uris_for_api_in_src() {
         let html = r#"<img src="upload:abc123/photo.jpg" alt="test">"#;
         let result = resolve_upload_uris_for_api(html, "my-blog");
-        assert_eq!(result, r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg" alt="test">"#);
+        assert_eq!(
+            result,
+            r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg" alt="test">"#
+        );
     }
 
     #[test]
@@ -2891,7 +2903,10 @@ mod tests {
     fn resolve_upload_uris_for_api_in_href() {
         let html = r#"<a href="upload:abc123/doc.pdf">Download</a>"#;
         let result = resolve_upload_uris_for_api(html, "app");
-        assert_eq!(result, r#"<a href="/api/v1/apps/app/uploads/abc123/doc.pdf">Download</a>"#);
+        assert_eq!(
+            result,
+            r#"<a href="/api/v1/apps/app/uploads/abc123/doc.pdf">Download</a>"#
+        );
     }
 
     #[test]
@@ -2905,7 +2920,10 @@ mod tests {
     fn resolve_upload_uris_for_ui_in_src() {
         let html = r#"<img src="upload:abc123/photo.jpg" alt="test">"#;
         let result = resolve_upload_uris_for_ui(html, "my-blog");
-        assert_eq!(result, r#"<img src="/apps/my-blog/uploads/file/abc123/photo.jpg" alt="test">"#);
+        assert_eq!(
+            result,
+            r#"<img src="/apps/my-blog/uploads/file/abc123/photo.jpg" alt="test">"#
+        );
     }
 
     #[test]
@@ -2944,7 +2962,10 @@ mod tests {
             }
         });
         project_richtext_fields(&mut data, &schema, false, "my-blog");
-        assert_eq!(data["body"], serde_json::json!(r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg">"#));
+        assert_eq!(
+            data["body"],
+            serde_json::json!(r#"<img src="/api/v1/apps/my-blog/uploads/abc123/photo.jpg">"#)
+        );
     }
 
     #[test]

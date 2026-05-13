@@ -141,8 +141,16 @@ async fn list_entries(
     let entries = result.entries;
     let has_prev = page > 1;
     let has_next = page < total_pages;
-    let page_start = if entries.is_empty() { 0 } else { (page - 1) * PAGE_SIZE + 1 };
-    let page_end = if entries.is_empty() { 0 } else { page_start + entries.len() - 1 };
+    let page_start = if entries.is_empty() {
+        0
+    } else {
+        (page - 1) * PAGE_SIZE + 1
+    };
+    let page_end = if entries.is_empty() {
+        0
+    } else {
+        page_start + entries.len() - 1
+    };
 
     let columns = get_display_columns(&schema_file.schema);
 
@@ -1086,13 +1094,11 @@ async fn publish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let echo = axum_htmx::HxResponseTrigger::after_settle([
-            axum_htmx::HxEvent::new_with_data(
-                "wfEcho",
-                serde_json::json!({"kind": "ok", "msg": "Entry published."}),
-            )
-            .unwrap(),
-        ]);
+        let echo = axum_htmx::HxResponseTrigger::after_settle([axum_htmx::HxEvent::new_with_data(
+            "wfEcho",
+            serde_json::json!({"kind": "ok", "msg": "Entry published."}),
+        )
+        .unwrap()]);
         let tmpl = state
             .templates
             .acquire_env()
@@ -1184,13 +1190,11 @@ async fn unpublish_entry(
 
     if is_htmx {
         let csrf_token = auth::ensure_csrf_token(&session).await;
-        let echo = axum_htmx::HxResponseTrigger::after_settle([
-            axum_htmx::HxEvent::new_with_data(
-                "wfEcho",
-                serde_json::json!({"kind": "ok", "msg": "Entry unpublished."}),
-            )
-            .unwrap(),
-        ]);
+        let echo = axum_htmx::HxResponseTrigger::after_settle([axum_htmx::HxEvent::new_with_data(
+            "wfEcho",
+            serde_json::json!({"kind": "ok", "msg": "Entry unpublished."}),
+        )
+        .unwrap()]);
         let tmpl = state
             .templates
             .acquire_env()

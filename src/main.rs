@@ -59,6 +59,10 @@ struct Cli {
     /// Trust X-Forwarded-For headers for rate limiting (enable only behind a trusted reverse proxy)
     #[arg(long, global = true)]
     trust_proxy_headers: bool,
+
+    /// Enable public browser registration. Disabled by default; use create-admin for setup.
+    #[arg(long, global = true)]
+    enable_registrations: bool,
 }
 
 #[derive(Subcommand)]
@@ -89,6 +93,18 @@ enum Command {
         #[arg(long)]
         app: String,
     },
+    /// Create the initial admin user from the CLI
+    CreateAdmin {
+        /// Admin email address
+        #[arg(long)]
+        email: String,
+        /// Optional admin username
+        #[arg(long)]
+        username: Option<String>,
+        /// Admin password
+        #[arg(long)]
+        password: String,
+    },
     /// Output AI-optimized workflow context for LLM agents
     Prime,
     /// Output a minimal snippet for AGENTS.md / CLAUDE.md
@@ -116,6 +132,7 @@ async fn main() -> eyre::Result<()> {
         cli.max_body_size,
     );
     config.trust_proxy_headers = cli.trust_proxy_headers;
+    config.registrations_enabled = cli.enable_registrations;
     config.ensure_dirs()?;
 
     match cli.command.unwrap_or(Command::Serve) {
@@ -128,6 +145,11 @@ async fn main() -> eyre::Result<()> {
             Ok(())
         }
         Command::Serve => run_server(config, api_rate_limit).await,
+        Command::CreateAdmin {
+            email,
+            username,
+            password,
+        } => create_initial_admin(config, email, username, password).await,
         Command::Import { path, app } => {
             let pool = db::init_pool(&config.db_path).await?;
             let app_record = models::find_app_by_slug(&pool, &app)
@@ -163,7 +185,7 @@ async fn main() -> eyre::Result<()> {
                 .expect("Failed to init allowthem");
             let users = ath.db().list_users().await.unwrap_or_default();
             if users.is_empty() {
-                eyre::bail!("No users exist. Run the server and set up an admin user first.");
+                eyre::bail!("No users exist. Run `substrukt create-admin` first.");
             }
             let app_record = models::find_app_by_slug(&pool, &app)
                 .await?
@@ -187,6 +209,140 @@ async fn main() -> eyre::Result<()> {
     }
 }
 
+async fn bootstrap_roles(ath: &allowthem_core::AllowThem) -> eyre::Result<()> {
+    for role_name in ["admin", "editor", "viewer"] {
+        let rn = allowthem_core::RoleName::new(role_name);
+        if ath.db().get_role_by_name(&rn).await?.is_none() {
+            ath.db().create_role(&rn, None).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn create_initial_admin(
+    config: Config,
+    email: String,
+    username: Option<String>,
+    password: String,
+) -> eyre::Result<()> {
+    let pool = db::init_pool(&config.db_path).await?;
+    let ath = allowthem_core::AllowThemBuilder::with_pool(pool)
+        .cookie_secure(config.secure_cookies)
+        .build()
+        .await
+        .map_err(|e| eyre::eyre!("Failed to initialize allowthem: {e}"))?;
+
+    bootstrap_roles(&ath).await?;
+
+    let users = ath.db().list_users().await.unwrap_or_default();
+    if !users.is_empty() {
+        eyre::bail!("Users already exist; create-admin is only for initial setup.");
+    }
+
+    if password.len() < 8 {
+        eyre::bail!("Password must be at least 8 characters.");
+    }
+
+    let email =
+        allowthem_core::Email::new(email).map_err(|e| eyre::eyre!("Invalid email address: {e}"))?;
+    let username = username
+        .map(|username| username.trim().to_string())
+        .filter(|username| !username.is_empty())
+        .map(allowthem_core::Username::new);
+
+    let user = ath
+        .db()
+        .create_user(email, &password, username, None)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to create admin user: {e}"))?;
+    ath.db()
+        .set_email_verified(user.id, true)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to mark admin email verified: {e}"))?;
+
+    let role = ath
+        .db()
+        .get_role_by_name(&allowthem_core::RoleName::new("admin"))
+        .await?
+        .ok_or_else(|| eyre::eyre!("Admin role was not created"))?;
+    ath.db()
+        .assign_role(&user.id, &role.id)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to assign admin role: {e}"))?;
+
+    println!("Admin user created: {}", user.email.as_str());
+    Ok(())
+}
+
+fn spawn_registration_event_handler(
+    ath: allowthem_core::AllowThem,
+    pool: sqlx::SqlitePool,
+    has_users: Arc<AtomicBool>,
+    mut events_rx: allowthem_core::LifecycleEventReceiver,
+) {
+    tokio::spawn(async move {
+        while let Some(event) = events_rx.recv().await {
+            let allowthem_core::LifecycleEvent::Registered(e) = event else {
+                continue;
+            };
+            has_users.store(true, std::sync::atomic::Ordering::Relaxed);
+            match e.source {
+                allowthem_core::RegistrationSource::Password => {
+                    let user_count = ath.db().list_users().await.map(|u| u.len()).unwrap_or(0);
+                    if user_count == 1 {
+                        assign_role(&ath, &e.user.id, "admin").await;
+                        tracing::info!(
+                            user_id = %e.user.id,
+                            "auto-assigned admin role to first registered user"
+                        );
+                    }
+                }
+                allowthem_core::RegistrationSource::Invitation { metadata, .. } => {
+                    let role = match metadata.as_deref().unwrap_or("viewer") {
+                        "admin" => "admin",
+                        "editor" => "editor",
+                        "viewer" => "viewer",
+                        other => {
+                            tracing::warn!(role = other, "invalid invitation role metadata");
+                            "viewer"
+                        }
+                    };
+                    if role != "admin"
+                        && let Ok(apps) = models::list_apps(&pool).await
+                    {
+                        let user_id = e.user.id.to_string();
+                        for app in apps {
+                            if let Err(error) =
+                                models::grant_app_access(&pool, app.id, &user_id).await
+                            {
+                                tracing::error!(
+                                    %error,
+                                    app_id = app.id,
+                                    user_id,
+                                    "failed to grant invited user app access"
+                                );
+                            }
+                        }
+                    }
+                    assign_role(&ath, &e.user.id, role).await;
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+async fn assign_role(
+    ath: &allowthem_core::AllowThem,
+    user_id: &allowthem_core::UserId,
+    role: &str,
+) {
+    let role_name = allowthem_core::RoleName::new(role);
+    if let Ok(Some(role)) = ath.db().get_role_by_name(&role_name).await {
+        let _ = ath.db().assign_role(user_id, &role.id).await;
+    }
+}
+
 async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     let pool = db::init_pool(&config.db_path).await?;
 
@@ -199,31 +355,21 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     let audit_pool = audit::init_pool(&audit_db_path).await?;
     let audit_logger = audit::AuditLogger::new(audit_pool);
 
+    // Email sender — SMTP when env is configured, LogEmailSender otherwise.
+    let smtp_cfg = substrukt::email::SmtpConfig::from_env()?;
+    let email_sender = substrukt::email::build_sender(smtp_cfg)?;
+
     // allowthem auth system (shares substrukt's pool)
     let csrf_key: [u8; 32] = rand::random();
     let ath = allowthem_core::AllowThemBuilder::with_pool(pool.clone())
         .cookie_secure(config.secure_cookies)
         .csrf_key(csrf_key)
+        .email_sender(Box::new(email_sender.clone()))
         .build()
         .await
         .expect("Failed to initialize allowthem");
 
-    // Bootstrap roles (idempotent)
-    for role_name in ["admin", "editor", "viewer"] {
-        let rn = allowthem_core::RoleName::new(role_name);
-        if ath
-            .db()
-            .get_role_by_name(&rn)
-            .await
-            .unwrap_or(None)
-            .is_none()
-        {
-            ath.db()
-                .create_role(&rn, None)
-                .await
-                .expect("Failed to create role");
-        }
-    }
+    bootstrap_roles(&ath).await?;
 
     // One-time data migration: move old users into allowthem
     let id_map = db::migration::migrate_users_to_allowthem(&pool, &ath).await?;
@@ -232,7 +378,7 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
     // Grandfather existing users so the hard-block login policy does not lock them out.
     db::migration::grandfather_email_verification(&pool).await?;
 
-    // Check if any users exist (for setup redirect) — after migration so migrated users count
+    // Check if any users exist — after migration so migrated users count.
     let has_users = Arc::new(AtomicBool::new(
         !ath.db().list_users().await.unwrap_or_default().is_empty(),
     ));
@@ -241,11 +387,8 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         allowthem_core::EmbeddedAuthClient::new(ath.clone(), "/login"),
     );
 
-    // Email sender — SMTP when env is configured, LogEmailSender otherwise.
-    let smtp_cfg = substrukt::email::SmtpConfig::from_env()?;
-    let email_sender = substrukt::email::build_sender(smtp_cfg)?;
-
-    // AllowThem built-in auth routes (login, register, logout, password reset)
+    // AllowThem built-in auth routes. Public browser registration is config
+    // gated; invites still use the shared AllowThem register page.
     let scheme = if config.secure_cookies {
         "https"
     } else {
@@ -258,9 +401,9 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         .register()
         .logout()
         .password_reset()
-        .email_sender(email_sender.clone())
         .base_url(base_url)
         .is_production(config.secure_cookies)
+        .public_registration(config.registrations_enabled)
         .events(events_tx)
         .default_branding(
             allowthem_core::applications::BrandingConfig::new("substrukt")
@@ -268,39 +411,7 @@ async fn run_server(config: Config, api_rate_limit: usize) -> eyre::Result<()> {
         )
         .build(&ath)
         .expect("Failed to build allowthem auth routes");
-
-    // Auto-assign admin role to the first registered user.
-    {
-        let ath_events = ath.clone();
-        let has_users_flag = has_users.clone();
-        tokio::spawn(async move {
-            let mut rx = events_rx;
-            while let Some(event) = rx.recv().await {
-                let allowthem_core::AuthEvent::Registered(ref e) = event else {
-                    continue;
-                };
-                has_users_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                let user_count = ath_events
-                    .db()
-                    .list_users()
-                    .await
-                    .map(|u| u.len())
-                    .unwrap_or(0);
-                if user_count == 1 {
-                    let admin_role = allowthem_core::RoleName::new("admin");
-                    if let Ok(Some(role)) =
-                        ath_events.db().get_role_by_name(&admin_role).await
-                    {
-                        let _ = ath_events.db().assign_role(&e.user.id, &role.id).await;
-                    }
-                    tracing::info!(
-                        user_id = %e.user.id,
-                        "auto-assigned admin role to first registered user"
-                    );
-                }
-            }
-        });
-    }
+    spawn_registration_event_handler(ath.clone(), pool.clone(), has_users.clone(), events_rx);
 
     // Migrate old single-app layout to multi-app
     substrukt::migrate_single_app_layout(&config.data_dir)?;

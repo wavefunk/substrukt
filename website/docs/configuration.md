@@ -67,13 +67,21 @@ substrukt export backup.tar.gz --app my-app --data-dir /var/lib/substrukt
 
 ### create-token
 
-Creates an API token for a specific app without starting the server. Requires at least one user to exist (run the server and complete setup first).
+Creates an API token for a specific app without starting the server. Requires at least one user to exist (run `substrukt create-admin` first).
 
 ```sh
 substrukt create-token "CI deploy" --app my-app
 ```
 
 The raw token is printed to stdout. Save it -- it cannot be retrieved again.
+
+### create-admin
+
+Creates the initial admin user without starting the server. This command only works while the user table is empty.
+
+```sh
+substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
+```
 
 ## Logging
 

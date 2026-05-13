@@ -9,7 +9,7 @@ data:
 ---
 {% extends "_marketing.html" %}
 
-{% block title %}Substrukt — Schema-driven CMS built in Rust{% endblock %}
+{% block title %}Substrukt — Your content as files. Your CMS as one binary.{% endblock %}
 
 {% block content %}
 <!-- HERO -->
@@ -17,8 +17,8 @@ data:
   <div class="mk-hero-grid" aria-hidden="true"></div>
   <div class="mk-hero-inner">
     <div class="mk-hero-eyebrow">SUBSTRUKT · OPEN SOURCE CMS</div>
-    <h1>Schema-driven CMS, built in <em>Rust</em>.</h1>
-    <p>Define content types with JSON Schema. Edit through a web UI. Store as files. Serve via API.</p>
+    <h1>Your content as <em>files</em>. Your CMS as one <em>binary</em>.</h1>
+    <p>A headless CMS that stores content as JSON files on disk and serves it over a REST API. No database server, no SaaS — run it anywhere.</p>
     <div class="mk-hero-cta">
       <a href="/docs/introduction" class="wf-btn lg primary">Read the docs</a>
       <a href="https://github.com/wavefunk/substrukt" class="wf-btn lg" target="_blank" rel="noopener">GitHub</a>
@@ -39,9 +39,9 @@ data:
   <div class="mk-sect-head">
     <div>
       <div class="mk-sect-kicker">— 01 / FEATURES</div>
-      <h2 class="mk-sect-title">Everything you need, nothing you don't.</h2>
+      <h2 class="mk-sect-title">No vendor lock-in.</h2>
     </div>
-    <p class="mk-sect-sub">A schema-first CMS that stores content as files, serves it over a REST API, and fits in a single binary. No database server. No SaaS lock-in.</p>
+    <p class="mk-sect-sub">Content lives as plain JSON files you can inspect, version control, and move between environments. The CMS is a single binary with SQLite for auth. Nothing else to install or maintain.</p>
   </div>
   <div class="mk-features">
     {% for feat in features %}
@@ -61,7 +61,7 @@ data:
       <div class="mk-sect-kicker">— 02 / HOW IT WORKS</div>
       <h2 class="mk-sect-title">Four steps to content.</h2>
     </div>
-    <p class="mk-sect-sub">Define your content types, edit them through a generated UI, consume via API, and sync between environments.</p>
+    <p class="mk-sect-sub">Describe your content types in JSON Schema, edit through a generated UI, consume via API, and sync between environments.</p>
   </div>
   <div class="mk-steps">
     {% for step in steps %}
@@ -79,18 +79,19 @@ data:
   <div class="mk-sect-head">
     <div>
       <div class="mk-sect-kicker">— 03 / QUICK START</div>
-      <h2 class="mk-sect-title">Up and running in minutes.</h2>
+      <h2 class="mk-sect-title">Running from the CLI.</h2>
     </div>
-    <p class="mk-sect-sub">Build from source or pull the Docker image. One command to start.</p>
+    <p class="mk-sect-sub">Pull the Docker image or build from source, create the first admin from the CLI, then sign in.</p>
   </div>
-  <pre><code><span class="comment"># Build from source</span>
-git clone https://github.com/wavefunk/substrukt.git
-cd substrukt
-cargo build --release
-./target/release/substrukt serve
+<pre><code><span class="comment"># Docker (recommended)</span>
+docker pull ghcr.io/wavefunk/substrukt
+docker run --rm -v substrukt-data:/data ghcr.io/wavefunk/substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
+docker run -p 3000:3000 -v substrukt-data:/data ghcr.io/wavefunk/substrukt
 
-<span class="comment"># Or run with Docker</span>
-docker build -t substrukt .
-docker run -p 3000:3000 -v substrukt-data:/data substrukt</code></pre>
+<span class="comment"># Or build from source</span>
+git clone https://github.com/wavefunk/substrukt.git
+cd substrukt && cargo build --release
+./target/release/substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
+./target/release/substrukt serve</code></pre>
 </section>
 {% endblock %}

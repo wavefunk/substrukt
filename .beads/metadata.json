@@ -1,7 +1,4 @@
 {
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "server",
-  "dolt_database": "substrukt",
-  "project_id": "513b9de9-673a-4190-8be2-37a7698d937f"
+  "database": "beads.db",
+  "jsonl_export": "issues.jsonl"
 }

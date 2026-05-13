@@ -4,7 +4,7 @@ use axum::{
     extract::{Request, State},
     http::Method,
     middleware::Next,
-    response::{IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use tower_sessions::Session;
 
@@ -260,7 +260,7 @@ fn csrf_error_response(state: &AppState) -> Response {
     (axum::http::StatusCode::FORBIDDEN, Html(html)).into_response()
 }
 
-/// Middleware: validate allowthem session cookie. Redirect to /setup or /login if needed.
+/// Middleware: validate allowthem session cookie. Redirect to /register or /login if needed.
 /// On success, inserts `allowthem_core::User` and `CurrentUserRole` into request extensions.
 pub async fn require_auth(
     State(state): State<AppState>,
@@ -281,9 +281,15 @@ pub async fn require_auth(
         return next.run(request).await;
     }
 
-    // Redirect to register if no users exist (first user gets admin via events)
     if !state.has_users.load(std::sync::atomic::Ordering::Relaxed) {
-        return htmx_aware_redirect(&request, "/register");
+        if state.config.registrations_enabled {
+            return htmx_aware_redirect(&request, "/register");
+        }
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Html("No admin user configured. Run `substrukt create-admin` from the server CLI."),
+        )
+            .into_response();
     }
 
     // Parse allowthem session cookie

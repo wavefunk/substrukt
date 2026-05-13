@@ -9,8 +9,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use allowthem_core::{AuthError, EmailMessage, EmailSender, LogEmailSender};
-use lettre::message::{Mailbox, header::ContentType};
+use allowthem_core::{
+    AuthError, EmailBranding, EmailMessage, EmailSender, LogEmailSender, render_email,
+};
+use lettre::message::{Mailbox, MultiPart, SinglePart, header::ContentType};
 use lettre::transport::smtp::AsyncSmtpTransport;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncTransport, Message, Tokio1Executor};
@@ -103,6 +105,7 @@ impl SmtpConfig {
 pub struct SmtpEmailSender {
     transport: AsyncSmtpTransport<Tokio1Executor>,
     from: Mailbox,
+    branding: EmailBranding,
 }
 
 impl SmtpEmailSender {
@@ -124,16 +127,26 @@ impl SmtpEmailSender {
         };
 
         let transport = builder.port(cfg.port).credentials(creds).build();
-        Ok(Self { transport, from })
+        Ok(Self {
+            transport,
+            from,
+            branding: EmailBranding {
+                app_name: "Substrukt".to_string(),
+                logo_url: None,
+                footer_line: None,
+            },
+        })
     }
 }
 
 impl EmailSender for SmtpEmailSender {
     fn send<'a>(
         &'a self,
-        message: EmailMessage<'a>,
+        message: &'a EmailMessage,
     ) -> Pin<Box<dyn Future<Output = Result<(), AuthError>> + Send + 'a>> {
         Box::pin(async move {
+            let rendered = render_email(&message.template, &self.branding);
+
             let to: Mailbox = message
                 .to
                 .parse()
@@ -142,20 +155,23 @@ impl EmailSender for SmtpEmailSender {
             let builder = Message::builder()
                 .from(self.from.clone())
                 .to(to)
-                .subject(message.subject);
+                .subject(&message.subject);
 
-            let email = match message.html {
-                Some(html) => builder
-                    .multipart(lettre::message::MultiPart::alternative_plain_html(
-                        message.body.to_string(),
-                        html.to_string(),
-                    ))
-                    .map_err(|e| AuthError::Email(e.to_string()))?,
-                None => builder
-                    .header(ContentType::TEXT_PLAIN)
-                    .body(message.body.to_string())
-                    .map_err(|e| AuthError::Email(e.to_string()))?,
-            };
+            let email = builder
+                .multipart(
+                    MultiPart::alternative()
+                        .singlepart(
+                            SinglePart::builder()
+                                .header(ContentType::TEXT_PLAIN)
+                                .body(rendered.text),
+                        )
+                        .singlepart(
+                            SinglePart::builder()
+                                .header(ContentType::TEXT_HTML)
+                                .body(rendered.html),
+                        ),
+                )
+                .map_err(|e| AuthError::Email(e.to_string()))?;
 
             self.transport
                 .send(email)

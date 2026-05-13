@@ -56,15 +56,17 @@ Requires Rust nightly (2026-01-05 or later).
 git clone https://github.com/wavefunk/substrukt.git
 cd substrukt
 cargo build --release
+./target/release/substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
 ./target/release/substrukt serve
 ```
 
-Open `http://localhost:3000`. On first visit you will be prompted to create an admin account.
+Open `http://localhost:3000` and sign in with the admin account you created.
 
 ### Docker
 
 ```sh
 docker pull ghcr.io/wavefunk/substrukt
+docker run --rm -v substrukt-data:/data ghcr.io/wavefunk/substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
 docker run -p 3000:3000 -v substrukt-data:/data ghcr.io/wavefunk/substrukt
 ```
 
@@ -83,6 +85,7 @@ All options are passed as CLI flags:
 | `--api-rate-limit <N>` | `100` | Max API requests per IP per minute |
 | `--version-history-count <N>` | `10` | Max content versions to keep per entry |
 | `--max-body-size <MB>` | `50` | Maximum request body size in megabytes |
+| `--enable-registrations` | off | Enable public browser registration; invite links still work when disabled |
 | `--trust-proxy-headers` | off | Trust `X-Forwarded-For` for rate limiting (enable behind a reverse proxy) |
 
 Deployment webhooks are configured through the web UI per app (Settings > Deployments), not via CLI flags.
@@ -96,6 +99,7 @@ substrukt serve                        # Start the web server (default)
 substrukt import <path> --app <slug>   # Import a bundle tar.gz into an app
 substrukt export <path> --app <slug>   # Export an app's data as bundle tar.gz
 substrukt create-token <name> --app <slug>  # Create an API token for an app
+substrukt create-admin --email <email> --username <name> --password <password>
 substrukt prime                        # Output AI-optimized workflow context
 substrukt onboard                      # Output a minimal snippet for AGENTS.md / CLAUDE.md
 ```

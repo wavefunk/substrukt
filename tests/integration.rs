@@ -107,23 +107,61 @@ impl TestServer {
             openapi_cache: std::sync::Arc::new(std::sync::RwLock::new(None)),
             ath,
             auth_client,
-            email_sender: std::sync::Arc::new(allowthem_core::LogEmailSender) as std::sync::Arc<dyn allowthem_core::EmailSender>,
+            email_sender: std::sync::Arc::new(allowthem_core::LogEmailSender)
+                as std::sync::Arc<dyn allowthem_core::EmailSender>,
             has_users: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
 
-        let email_sender: std::sync::Arc<dyn allowthem_core::EmailSender> =
-            std::sync::Arc::new(allowthem_core::LogEmailSender);
+        let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ath_for_events = ath_for_test.clone();
+        let pool_for_events = pool_for_test.clone();
+        let has_users_for_events = state.has_users.clone();
+        tokio::spawn(async move {
+            while let Some(event) = events_rx.recv().await {
+                let allowthem_core::LifecycleEvent::Registered(e) = event else {
+                    continue;
+                };
+                has_users_for_events.store(true, std::sync::atomic::Ordering::Relaxed);
+                if let allowthem_core::RegistrationSource::Invitation { metadata, .. } = e.source {
+                    let role = match metadata.as_deref().unwrap_or("viewer") {
+                        "admin" => "admin",
+                        "editor" => "editor",
+                        "viewer" => "viewer",
+                        _ => "viewer",
+                    };
+                    if role != "admin" {
+                        if let Ok(apps) = substrukt::db::models::list_apps(&pool_for_events).await {
+                            let uid = e.user.id.to_string();
+                            for app in apps {
+                                let _ = substrukt::db::models::grant_app_access(
+                                    &pool_for_events,
+                                    app.id,
+                                    &uid,
+                                )
+                                .await;
+                            }
+                        }
+                    }
+                    let role_name = allowthem_core::RoleName::new(role);
+                    if let Ok(Some(r)) = ath_for_events.db().get_role_by_name(&role_name).await {
+                        let _ = ath_for_events.db().assign_role(&e.user.id, &r.id).await;
+                    }
+                }
+            }
+        });
+
         let allowthem_auth_router = allowthem_server::AllRoutesBuilder::new()
             .login()
             .register()
             .logout()
             .password_reset()
-            .email_sender(email_sender.clone())
             .base_url("http://localhost:0".to_string())
+            .public_registration(false)
             .default_branding(
                 allowthem_core::applications::BrandingConfig::new("substrukt")
                     .with_accent("#f59e0b", allowthem_core::AccentInk::Black),
             )
+            .events(events_tx)
             .build(&ath_for_test)
             .expect("Failed to build allowthem auth routes");
 
@@ -174,19 +212,43 @@ impl TestServer {
     }
 
     async fn setup_admin(&self) {
-        // Register via AllowThem's /register so the session cookie is set
-        // naturally through Set-Cookie response headers.
-        let resp = self.client.get(self.url("/register")).send().await.unwrap();
+        let email = allowthem_core::Email::new("admin@setup.local".to_string()).unwrap();
+        let user = match self.ath.db().get_user_by_email(&email).await {
+            Ok(user) => user,
+            Err(_) => {
+                let username = allowthem_core::Username::new("admin");
+                let user = self
+                    .ath
+                    .db()
+                    .create_user(email, "testpassword", Some(username), None)
+                    .await
+                    .unwrap();
+                self.ath
+                    .db()
+                    .set_email_verified(user.id, true)
+                    .await
+                    .unwrap();
+                user
+            }
+        };
+
+        let admin_role = allowthem_core::RoleName::new("admin");
+        if let Ok(Some(role)) = self.ath.db().get_role_by_name(&admin_role).await {
+            let _ = self.ath.db().assign_role(&user.id, &role.id).await;
+        }
+        self.state
+            .has_users
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
+        let resp = self.client.get(self.url("/login")).send().await.unwrap();
         let body = resp.text().await.unwrap();
-        let csrf = extract_csrf_token(&body).expect("CSRF token on /register");
+        let csrf = extract_csrf_token(&body).expect("CSRF token on /login");
         let resp = self
             .client
-            .post(self.url("/register"))
+            .post(self.url("/login"))
             .form(&[
-                ("email", "admin@setup.local"),
-                ("username", "admin"),
+                ("identifier", "admin@setup.local"),
                 ("password", "testpassword"),
-                ("password_confirm", "testpassword"),
                 ("csrf_token", csrf.as_str()),
             ])
             .send()
@@ -195,21 +257,8 @@ impl TestServer {
         assert_eq!(
             resp.status(),
             StatusCode::SEE_OTHER,
-            "register should redirect on success"
+            "admin login should redirect on success"
         );
-
-        // Assign admin role
-        let email = allowthem_core::Email::new("admin@setup.local".to_string()).unwrap();
-        let user = self.ath.db().get_user_by_email(&email).await.unwrap();
-        let admin_role = allowthem_core::RoleName::new("admin");
-        if let Ok(Some(role)) = self.ath.db().get_role_by_name(&admin_role).await {
-            let _ = self.ath.db().assign_role(&user.id, &role.id).await;
-        }
-
-        // Mark users exist
-        self.state
-            .has_users
-            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     async fn create_schema(&self, json: &str) {
@@ -315,11 +364,12 @@ impl Drop for TestServer {
 // ── Auth tests ───────────────────────────────────────────────
 
 #[tokio::test]
-async fn auth_redirects_to_register_when_no_users() {
+async fn auth_requires_cli_admin_when_no_users() {
     let s = TestServer::start().await;
     let resp = s.client.get(s.url("/")).send().await.unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert_eq!(resp.headers().get("location").unwrap(), "/register");
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("create-admin"));
 }
 
 #[tokio::test]
@@ -379,11 +429,7 @@ async fn forgot_password_is_publicly_accessible() {
         .redirect(redirect::Policy::none())
         .build()
         .unwrap();
-    let resp = fresh
-        .get(s.url("/forgot-password"))
-        .send()
-        .await
-        .unwrap();
+    let resp = fresh.get(s.url("/forgot-password")).send().await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.text().await.unwrap();
     assert!(
@@ -478,7 +524,14 @@ async fn reset_password_end_to_end_changes_password() {
         .redirect(redirect::Policy::none())
         .build()
         .unwrap();
-    let body = fresh.get(s.url("/login")).send().await.unwrap().text().await.unwrap();
+    let body = fresh
+        .get(s.url("/login"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
     let csrf = extract_csrf_token(&body).expect("CSRF on login");
     let resp = fresh
         .post(s.url("/login"))
@@ -497,7 +550,14 @@ async fn reset_password_end_to_end_changes_password() {
     );
 
     // New password works.
-    let body = fresh.get(s.url("/login")).send().await.unwrap().text().await.unwrap();
+    let body = fresh
+        .get(s.url("/login"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
     let csrf = extract_csrf_token(&body).expect("CSRF on login");
     let resp = fresh
         .post(s.url("/login"))
@@ -584,7 +644,6 @@ async fn reset_password_rejects_used_token() {
     assert!(body.contains("invalid or has expired"));
 }
 
-
 #[tokio::test]
 async fn setup_admin_is_auto_verified_and_can_login() {
     let s = TestServer::start().await;
@@ -654,7 +713,6 @@ async fn login_blocks_inactive_user() {
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
     assert_eq!(resp.headers().get("location").unwrap(), "/login");
 }
-
 
 // ── Schema CRUD tests ────────────────────────────────────────
 
@@ -1804,7 +1862,131 @@ async fn single_full_workflow() {
 
 // Old publish/webhook tests removed — replaced by deployment tests below
 
-// ── Invitation & Signup tests (removed — auth delegated to AllowThem) ──
+// ── Invitation & Signup tests ──────────────────────────────────────────
+
+#[tokio::test]
+async fn register_route_is_disabled() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let anon = Client::builder()
+        .cookie_store(true)
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = anon.get(s.url("/register")).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "shared register route should render disabled state"
+    );
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("Registration is disabled"));
+    assert!(
+        !body.contains("<form method=\"post\" action=\"/register\""),
+        "disabled public registration should not render a signup form"
+    );
+}
+
+#[tokio::test]
+async fn invite_register_url_creates_user_with_role_access_and_consumes_invite() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let csrf = s.get_csrf("/settings/users").await;
+    let resp = s
+        .client
+        .post(s.url("/settings/users/invite"))
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("email", "invitee@test.com"),
+            ("role", "editor"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    let invite_url = extract_invite_url(&body).expect("invite URL should be shown");
+
+    let invitee = Client::builder()
+        .cookie_store(true)
+        .redirect(redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = invitee.get(s.url(&invite_url)).send().await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    let csrf = extract_csrf_token(&body).expect("CSRF on register form");
+    let token = extract_hidden_token(&body).expect("register form should preserve invite token");
+
+    let resp = invitee
+        .post(s.url("/register"))
+        .form(&[
+            ("csrf_token", csrf.as_str()),
+            ("token", token.as_str()),
+            ("email", "invitee@test.com"),
+            ("username", "invitee"),
+            ("password", "password123"),
+            ("password_confirm", "password123"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::SEE_OTHER,
+        "accepted invitation should sign in and redirect"
+    );
+
+    let email = allowthem_core::Email::new("invitee@test.com".to_string()).unwrap();
+    let user = s
+        .ath
+        .db()
+        .get_user_by_email(&email)
+        .await
+        .expect("invited user should exist");
+    for _ in 0..50 {
+        if s.ath
+            .db()
+            .has_role(&user.id, &allowthem_core::RoleName::new("editor"))
+            .await
+            .unwrap()
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        s.ath
+            .db()
+            .has_role(&user.id, &allowthem_core::RoleName::new("editor"))
+            .await
+            .unwrap(),
+        "invited user should receive the selected role"
+    );
+
+    let apps = substrukt::db::models::list_apps(&s.pool).await.unwrap();
+    assert!(!apps.is_empty(), "fixture should include the default app");
+    for app in apps {
+        assert!(
+            substrukt::db::models::user_has_app_access(&s.pool, app.id, &user.id.to_string())
+                .await
+                .unwrap(),
+            "invited editor should receive access to app {}",
+            app.slug
+        );
+    }
+
+    let pending = s.ath.db().list_pending_invitations().await.unwrap();
+    assert!(
+        pending
+            .iter()
+            .all(|inv| inv.email.as_ref().map(|e| e.as_str()) != Some("invitee@test.com")),
+        "accepted invitation should be consumed"
+    );
+}
 
 // ── Content search tests ─────────────────────────────────────
 
@@ -2130,7 +2312,7 @@ fn extract_invite_url(html: &str) -> Option<String> {
                 .replace("&#x2f;", "/")
                 .replace("&#x3d;", "=")
                 .replace("&amp;", "&");
-            // The URL may be absolute (http://host/signup?token=...) or relative (/signup?token=...)
+            // The URL may be absolute (http://host/register?token=...) or relative (/register?token=...)
             // Strip the scheme+host prefix if present, returning just the path portion.
             let path = if let Some(rest) = url
                 .strip_prefix("http://")
@@ -2144,7 +2326,7 @@ fn extract_invite_url(html: &str) -> Option<String> {
             } else {
                 &url
             };
-            if path.starts_with("/signup?token=") {
+            if path.starts_with("/register?token=") {
                 return Some(path.to_string());
             }
         }
@@ -9605,7 +9787,11 @@ async fn upload_in_array_saves_correctly() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER, "Entry should save without error");
+    assert_eq!(
+        resp.status(),
+        StatusCode::SEE_OTHER,
+        "Entry should save without error"
+    );
 
     // Verify the data via API
     let token = s.create_api_token("array-upload-test").await;
@@ -9623,7 +9809,9 @@ async fn upload_in_array_saves_correctly() {
 
     let entry = &entries[0];
     assert_eq!(entry["name"], "Summer Album");
-    let photos = entry["photos"].as_array().expect("photos should be an array");
+    let photos = entry["photos"]
+        .as_array()
+        .expect("photos should be an array");
     assert_eq!(photos.len(), 1);
     assert_eq!(photos[0]["caption"], "Beach day");
     assert!(
@@ -9714,7 +9902,9 @@ async fn direct_upload_array_saves_correctly() {
     assert_eq!(docs[1]["mime"], "image/png");
 
     // Re-save via edit (preserves existing uploads via __current)
-    let csrf = s.get_csrf("/apps/default/content/files/my-documents/edit").await;
+    let csrf = s
+        .get_csrf("/apps/default/content/files/my-documents/edit")
+        .await;
     let edit_html = s
         .client
         .get(s.url("/apps/default/content/files/my-documents/edit"))
@@ -9724,7 +9914,10 @@ async fn direct_upload_array_saves_correctly() {
         .text()
         .await
         .unwrap();
-    assert!(edit_html.contains("report.pdf"), "edit page should show existing upload");
+    assert!(
+        edit_html.contains("report.pdf"),
+        "edit page should show existing upload"
+    );
 
     let current0 = serde_json::to_string(&docs[0]).unwrap();
     let current1 = serde_json::to_string(&docs[1]).unwrap();

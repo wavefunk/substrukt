@@ -1,11 +1,11 @@
-- title: Define a schema
-  body: Create a JSON Schema with an x-substrukt extension that sets the title, slug, and storage mode.
+- title: Describe your content
+  body: Write a JSON Schema (or let an AI generate one) with the fields, types, and validation rules for your content type.
 
-- title: Edit content
-  body: The web UI generates a form from your schema. Create, edit, and delete entries through the browser.
+- title: Edit in the browser
+  body: The web UI generates a full editing interface from your schema. Create, edit, publish, and manage entries without touching JSON directly.
 
 - title: Consume via API
-  body: Content is served as JSON through the REST API. Use bearer tokens for authentication.
+  body: Fetch published content as JSON through the REST API. Authenticate with bearer tokens scoped per app with admin, editor, or viewer roles.
 
 - title: Sync and deploy
-  body: Export and import bundles to move content between local and production. Trigger deployment webhooks on changes.
+  body: Export everything as a bundle and import it on another instance. Set up deployment webhooks to trigger rebuilds when content changes.

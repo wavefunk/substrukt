@@ -60,7 +60,7 @@ Substrukt maintains an audit log in a separate SQLite database (`audit.db` in th
 |--------|--------------|------|
 | `login` | session | User logs in |
 | `logout` | session | User logs out |
-| `user_create` | user | Admin account created during setup |
+| `user_create` | user | User account created through registration or invitation |
 | `schema_create` | schema | Schema created via UI |
 | `schema_update` | schema | Schema updated via UI |
 | `schema_delete` | schema | Schema deleted via UI |

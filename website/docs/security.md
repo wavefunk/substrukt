@@ -5,7 +5,8 @@
 
 The web UI uses session-based authentication with cookies. Sessions are stored in SQLite via `tower-sessions-sqlx-store`.
 
-- First visit redirects to `/setup` if no users exist
+- If no users exist and public registration is disabled, protected pages return a setup message asking you to run `substrukt create-admin`
+- `/register` renders a disabled state unless `--enable-registrations` is set or the URL includes a valid invitation token
 - Subsequent visits redirect to `/login` if not authenticated
 - Sessions are managed via secure cookies (when `--secure-cookies` is enabled)
 
@@ -16,7 +17,7 @@ API endpoints use bearer token authentication. Tokens are generated as 32 random
 ### Public paths
 
 The following paths do not require authentication:
-- `/login` and `/setup` -- authentication pages
+- `/login` and `/register` -- authentication pages
 - `/api/v1/*` -- API routes (use bearer tokens instead)
 - `/uploads/file/*` -- public file serving
 - `/metrics` -- Prometheus metrics endpoint

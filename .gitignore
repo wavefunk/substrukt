@@ -16,3 +16,4 @@
 tasks.org
 website/dist/
 website/.eigen_cache/
+.cargo/

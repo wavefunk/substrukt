@@ -358,12 +358,28 @@ fn render_field(
                 .and_then(|v| v.get("markdown"))
                 .and_then(|m| m.as_str())
                 .map(|md| {
-                    let plain: String = md.chars().filter(|c| !matches!(c, '#' | '*' | '_' | '~' | '`' | '>' | '[' | ']' | '(' | ')' | '!')).collect();
+                    let plain: String = md
+                        .chars()
+                        .filter(|c| {
+                            !matches!(
+                                c,
+                                '#' | '*' | '_' | '~' | '`' | '>' | '[' | ']' | '(' | ')' | '!'
+                            )
+                        })
+                        .collect();
                     let trimmed = plain.trim();
-                    if trimmed.len() > 200 { format!("{}...", &trimmed[..200]) } else { trimmed.to_string() }
+                    if trimmed.len() > 200 {
+                        format!("{}...", &trimmed[..200])
+                    } else {
+                        trimmed.to_string()
+                    }
                 })
                 .unwrap_or_default();
-            let snippet = if preview_text.is_empty() { "No content yet" } else { &preview_text };
+            let snippet = if preview_text.is_empty() {
+                "No content yet"
+            } else {
+                &preview_text
+            };
             let escaped_json = escape_html_attr(&current_json);
             let desc = get_description(schema).map(|d| format!(r#"<p style="color: var(--fg-muted); font-size: 12px; margin-top: 4px;">{d}</p>"#)).unwrap_or_default();
             format!(
@@ -575,8 +591,15 @@ fn render_field(
             )
         }
         ("object", _) => {
-            let inner =
-                render_form_fields_inner(schema, value, name, ref_options, app_slug, depth + 1, array_depth);
+            let inner = render_form_fields_inner(
+                schema,
+                value,
+                name,
+                ref_options,
+                app_slug,
+                depth + 1,
+                array_depth,
+            );
             format!(
                 r#"<fieldset style="border-top: 1px solid var(--hairline-dim); padding-top: 16px; margin-top: 16px;">
   <legend class="wf-label" style="padding: 0 4px;">{label}</legend>
@@ -607,12 +630,38 @@ fn render_field(
                         )
                     };
                     let item_html = if items_is_object {
-                        render_form_fields_inner(&items_schema, Some(item), &item_name, ref_options, app_slug, depth + 1, array_depth)
+                        render_form_fields_inner(
+                            &items_schema,
+                            Some(item),
+                            &item_name,
+                            ref_options,
+                            app_slug,
+                            depth + 1,
+                            array_depth,
+                        )
                     } else {
-                        let item_type = items_schema.get("type").and_then(|t| t.as_str()).unwrap_or("string");
+                        let item_type = items_schema
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("string");
                         let item_format = items_schema.get("format").and_then(|f| f.as_str());
-                        let item_label = items_schema.get("title").and_then(|t| t.as_str()).unwrap_or("");
-                        render_field(&item_name, item_label, item_type, item_format, &items_schema, Some(item), false, ref_options, app_slug, depth + 1, array_depth)
+                        let item_label = items_schema
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("");
+                        render_field(
+                            &item_name,
+                            item_label,
+                            item_type,
+                            item_format,
+                            &items_schema,
+                            Some(item),
+                            false,
+                            ref_options,
+                            app_slug,
+                            depth + 1,
+                            array_depth,
+                        )
                     };
                     items_html.push_str(&format!(
                         r#"<div class="array-item wf-framed" data-index="{i}">
@@ -639,10 +688,28 @@ fn render_field(
                     array_depth + 1,
                 )
             } else {
-                let item_type = items_schema.get("type").and_then(|t| t.as_str()).unwrap_or("string");
+                let item_type = items_schema
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("string");
                 let item_format = items_schema.get("format").and_then(|f| f.as_str());
-                let item_label = items_schema.get("title").and_then(|t| t.as_str()).unwrap_or("");
-                render_field(&template_name, item_label, item_type, item_format, &items_schema, None, false, ref_options, app_slug, depth + 1, array_depth + 1)
+                let item_label = items_schema
+                    .get("title")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+                render_field(
+                    &template_name,
+                    item_label,
+                    item_type,
+                    item_format,
+                    &items_schema,
+                    None,
+                    false,
+                    ref_options,
+                    app_slug,
+                    depth + 1,
+                    array_depth + 1,
+                )
             };
 
             // Array constraints (hint only)
@@ -794,9 +861,7 @@ fn form_data_to_json_inner(
                     .find(|(k, _)| k == &field_name)
                     .map(|(_, v)| v.as_str());
                 match val {
-                    Some(v) if !v.is_empty() => {
-                        serde_json::from_str(v).unwrap_or(Value::Null)
-                    }
+                    Some(v) if !v.is_empty() => serde_json::from_str(v).unwrap_or(Value::Null),
                     _ => Value::Null,
                 }
             }
@@ -888,7 +953,10 @@ fn parse_simple_form_value(
             Some(Value::Bool(val == "true"))
         }
         ("number", _) => {
-            let val = form.iter().find(|(k, _)| k == field_name).map(|(_, v)| v.as_str());
+            let val = form
+                .iter()
+                .find(|(k, _)| k == field_name)
+                .map(|(_, v)| v.as_str());
             match val {
                 Some(v) if !v.is_empty() => v
                     .parse::<f64>()
@@ -898,14 +966,20 @@ fn parse_simple_form_value(
             }
         }
         ("integer", _) => {
-            let val = form.iter().find(|(k, _)| k == field_name).map(|(_, v)| v.as_str());
+            let val = form
+                .iter()
+                .find(|(k, _)| k == field_name)
+                .map(|(_, v)| v.as_str());
             match val {
                 Some(v) if !v.is_empty() => v.parse::<i64>().ok().map(|n| Value::Number(n.into())),
                 _ => None,
             }
         }
         _ => {
-            let val = form.iter().find(|(k, _)| k == field_name).map(|(_, v)| v.clone());
+            let val = form
+                .iter()
+                .find(|(k, _)| k == field_name)
+                .map(|(_, v)| v.clone());
             match val {
                 Some(v) if !v.is_empty() => Some(Value::String(v)),
                 _ => None,
@@ -955,7 +1029,12 @@ fn parse_array_form_data(
         .filter_map(|i| {
             let item_prefix = format!("{prefix}[{i}]");
             if items_is_object {
-                Some(form_data_to_json_inner(items_schema, form, &item_prefix, depth))
+                Some(form_data_to_json_inner(
+                    items_schema,
+                    form,
+                    &item_prefix,
+                    depth,
+                ))
             } else {
                 parse_simple_form_value(item_type, item_format, form, &item_prefix)
             }
@@ -1112,10 +1191,7 @@ mod tests {
             html.contains("Drop files or click"),
             "should have prompt text"
         );
-        assert!(
-            html.contains("wf-dropzone-hint"),
-            "should have hint text"
-        );
+        assert!(html.contains("wf-dropzone-hint"), "should have hint text");
         assert!(
             html.contains("wf-dropzone-input"),
             "file input should use wf-dropzone-input class"
@@ -1450,12 +1526,27 @@ mod tests {
             }
         });
         let html = render_form_fields(&schema, None, "", &ReferenceOptions::new(), "test-app");
-        assert!(html.contains("data-richtext"), "should have data-richtext attribute");
-        assert!(html.contains("data-richtext-name=\"body\""), "should have field name");
-        assert!(html.contains("data-richtext-app=\"test-app\""), "should have app slug");
+        assert!(
+            html.contains("data-richtext"),
+            "should have data-richtext attribute"
+        );
+        assert!(
+            html.contains("data-richtext-name=\"body\""),
+            "should have field name"
+        );
+        assert!(
+            html.contains("data-richtext-app=\"test-app\""),
+            "should have app slug"
+        );
         assert!(html.contains("wf-modal--lg"), "should use large modal");
-        assert!(html.contains("data-richtext-save"), "should have save button");
-        assert!(html.contains("data-richtext-discard"), "should have discard button");
+        assert!(
+            html.contains("data-richtext-save"),
+            "should have save button"
+        );
+        assert!(
+            html.contains("data-richtext-discard"),
+            "should have discard button"
+        );
         assert!(html.contains("type=\"hidden\""), "should have hidden input");
     }
 
@@ -1477,7 +1568,13 @@ mod tests {
                 "html": "<h1>Hello</h1>"
             }
         });
-        let html = render_form_fields(&schema, Some(&data), "", &ReferenceOptions::new(), "test-app");
+        let html = render_form_fields(
+            &schema,
+            Some(&data),
+            "",
+            &ReferenceOptions::new(),
+            "test-app",
+        );
         assert!(html.contains("Hello"), "should show preview text");
     }
 }

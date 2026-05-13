@@ -7,6 +7,7 @@ Substrukt requires Rust nightly (2026-01-05 or later).
 git clone https://github.com/wavefunk/substrukt.git
 cd substrukt
 cargo build --release
+./target/release/substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'
 ```
 
 The binary is at `./target/release/substrukt`.
@@ -25,13 +26,13 @@ cargo run -- serve
 
 The server starts on `http://localhost:3000` by default.
 
-## First-run setup
+## Create the first admin
 
-On your first visit, Substrukt redirects you to `/setup` where you create an admin account. This only happens once -- when there are no users in the database. A default app is created automatically.
+Create the first admin from the CLI before starting the server. Browser registration is disabled by default, so unattended production instances do not expose a public signup form. A default app is created automatically on startup.
 
-1. Open `http://localhost:3000` in your browser
-2. Enter a username and password on the setup page
-3. You are logged in and redirected to the apps dashboard
+1. Run `substrukt create-admin --email admin@example.com --username admin --password 'change-me-now'`
+2. Start the server with `substrukt serve`
+3. Open `http://localhost:3000` and sign in
 
 ## Create your first schema
 

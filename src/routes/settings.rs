@@ -255,7 +255,7 @@ async fn invite_user(
     } else {
         "http"
     };
-    let invite_url = format!("{scheme}://{host}/signup?token={raw_token}");
+    let invite_url = format!("{scheme}://{host}/register?token={raw_token}");
 
     // Re-fetch lists for display
     let invitations = state
@@ -700,8 +700,16 @@ async fn audit_log_page(
         .list_audit_log(action_filter, actor_filter, None, date_from, date_to, page)
         .await
         .map_err(|e| format!("DB error: {e}"))?;
-    let page_start = if entries.is_empty() { 0 } else { (page as usize - 1) * 100 + 1 };
-    let page_end = if entries.is_empty() { 0 } else { page_start + entries.len() - 1 };
+    let page_start = if entries.is_empty() {
+        0
+    } else {
+        (page as usize - 1) * 100 + 1
+    };
+    let page_end = if entries.is_empty() {
+        0
+    } else {
+        page_start + entries.len() - 1
+    };
 
     let actors = state
         .audit

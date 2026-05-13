@@ -1,17 +1,17 @@
-- title: Schema-driven forms
-  body: Define content types with JSON Schema. The UI generates forms automatically from your schema, including nested objects, arrays, and file uploads.
+- title: Editors that build themselves
+  body: Define a content type in JSON Schema and the web UI generates the forms — text fields, file uploads, nested objects, arrays. Change the schema, the editor updates.
 
-- title: File-based content
-  body: Content is stored as JSON files on disk, not in a database. Easy to inspect, version control, and migrate. In-memory caching keeps reads fast.
+- title: Content you can read
+  body: Every entry is a JSON file on disk, not a row in a database. Inspect it, diff it, commit it to git, or copy it to another server. In-memory caching keeps reads fast.
 
-- title: REST API
-  body: Every content type gets full CRUD endpoints. Bearer token auth. Export and import bundles for syncing between environments.
+- title: Full REST API
+  body: Every content type gets CRUD endpoints with bearer token auth and role-based access control. Export and import bundles to sync content between local, staging, and production.
 
-- title: Content-addressed uploads
-  body: Files are stored by SHA-256 hash with automatic deduplication. Upload the same file twice, it is stored once.
+- title: One binary, nothing to install
+  body: A single Rust binary with embedded SQLite for auth. No runtime dependencies, no database server to configure, no Node.js. Docker image included.
 
-- title: Single binary
-  body: One Rust binary, no runtime dependencies. SQLite for auth. Templates and static assets are served directly. Docker image included.
+- title: AI-friendly CLI
+  body: "Run `substrukt prime` to give any AI agent full context on your schemas, API, and CLI. AI tools can generate JSON Schemas, create content via the API, and manage deployments without manual setup."
 
-- title: Observability
-  body: Prometheus metrics endpoint, structured logging with tracing, and a separate audit log database tracking all mutations.
+- title: Production-ready out of the box
+  body: Prometheus metrics, audit logging, content-addressed uploads with SHA-256 deduplication, version history with one-click revert, S3 backups, and deployment webhooks.

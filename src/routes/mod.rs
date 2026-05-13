@@ -66,16 +66,12 @@ pub fn build_router(state: AppState, allowthem_auth_router: Router) -> Router {
         .route("/metrics", axum::routing::get(metrics::metrics_handler));
 
     #[cfg(debug_assertions)]
-    let core = core
-        .nest_service("/static", ServeDir::new("static"));
+    let core = core.nest_service("/static", ServeDir::new("static"));
 
     #[cfg(not(debug_assertions))]
-    let core = core
-        .route("/static/{*path}", axum::routing::get(serve_embedded_asset));
+    let core = core.route("/static/{*path}", axum::routing::get(serve_embedded_asset));
 
-    let core = core
-        .fallback(not_found)
-        .with_state(state);
+    let core = core.fallback(not_found).with_state(state);
 
     core.merge(allowthem_auth_router)
         .layer(middleware::from_fn(metrics::track_metrics))
@@ -163,11 +159,8 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
-
 #[cfg(not(debug_assertions))]
-async fn serve_embedded_asset(
-    axum::extract::Path(path): axum::extract::Path<String>,
-) -> Response {
+async fn serve_embedded_asset(axum::extract::Path(path): axum::extract::Path<String>) -> Response {
     use axum::http::{StatusCode, header};
 
     match StaticAssets::get(&path) {
@@ -175,11 +168,7 @@ async fn serve_embedded_asset(
             let mime = mime_guess::from_path(&path)
                 .first_or_octet_stream()
                 .to_string();
-            (
-                [(header::CONTENT_TYPE, mime)],
-                file.data,
-            )
-                .into_response()
+            ([(header::CONTENT_TYPE, mime)], file.data).into_response()
         }
         None => StatusCode::NOT_FOUND.into_response(),
     }

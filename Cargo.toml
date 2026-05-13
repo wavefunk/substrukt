@@ -56,6 +56,10 @@ minijinja-embed = "2"
 tempfile = "3"
 reqwest = { version = "0.12", features = ["cookies", "multipart"] }
 
+[patch.crates-io]
+allowthem-core = { path = "../allowthem/crates/core" }
+allowthem-server = { path = "../allowthem/crates/server" }
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
