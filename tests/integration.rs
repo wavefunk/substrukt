@@ -1988,6 +1988,40 @@ async fn invite_register_url_creates_user_with_role_access_and_consumes_invite()
     );
 }
 
+#[tokio::test]
+async fn invite_form_htmx_response_pushes_users_url() {
+    let s = TestServer::start().await;
+    s.setup_admin().await;
+
+    let csrf = s.get_csrf("/settings/users").await;
+    let resp = s
+        .client
+        .post(s.url("/settings/users/invite"))
+        .header("HX-Request", "true")
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("email", "reload-safe@test.com"),
+            ("role", "editor"),
+        ])
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers()
+            .get("hx-push-url")
+            .and_then(|value| value.to_str().ok()),
+        Some("/settings/users"),
+        "boosted invite submissions should keep browser history on the reload-safe users URL"
+    );
+    let body = resp.text().await.unwrap();
+    assert!(
+        extract_invite_url(&body).is_some(),
+        "boosted invite response should still render the generated invite URL"
+    );
+}
+
 // ── Content search tests ─────────────────────────────────────
 
 #[tokio::test]

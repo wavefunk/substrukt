@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use axum::{
     Extension, Form, Router,
     extract::State,
-    http::HeaderMap,
+    http::{HeaderMap, HeaderName, HeaderValue},
     response::{Html, IntoResponse, Redirect},
     routing::get,
 };
@@ -21,6 +21,20 @@ fn username_str(user: &allowthem_core::User) -> String {
         .as_ref()
         .map(|u| u.as_str().to_string())
         .unwrap_or_default()
+}
+
+fn users_page_response(is_htmx: bool, html: String) -> axum::response::Response {
+    if is_htmx {
+        return (
+            [(
+                HeaderName::from_static("hx-push-url"),
+                HeaderValue::from_static("/settings/users"),
+            )],
+            Html(html),
+        )
+            .into_response();
+    }
+    Html(html).into_response()
 }
 
 pub fn routes() -> Router<AppState> {
@@ -311,7 +325,7 @@ async fn invite_user(
             invite_url => invite_url,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok(users_page_response(is_htmx, html))
 }
 
 async fn render_users_with_error(
@@ -375,7 +389,7 @@ async fn render_users_with_error(
             error => error,
         })
         .map_err(|e| format!("Render error: {e}"))?;
-    Ok(Html(html).into_response())
+    Ok(users_page_response(is_htmx, html))
 }
 
 async fn profile_page(
