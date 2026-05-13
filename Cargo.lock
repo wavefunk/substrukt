@@ -83,7 +83,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "allowthem-core"
-version = "0.0.5"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5663d24fa5983418a1e58eb8406da086dc4273f3048c2e7bb19dc36e0f3be691"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -113,7 +115,9 @@ dependencies = [
 
 [[package]]
 name = "allowthem-server"
-version = "0.0.5"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "030116749e97fd4818302d1c685c6c5ddb0b663cf524b7bad878d84671a2819e"
 dependencies = [
  "allowthem-core",
  "axum",
